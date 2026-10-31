@@ -660,7 +660,7 @@ impl Skin {
         if name.is_empty() {
             return None;
         }
-        let key = parse_color(&self.get_str(v, e, "transparencycolor"));
+        let key = parse_color(&self.get_str(v, e, "transparencycolor")).filter(|_| e != 0);
         self.images.get(&name, key, self.get_num(v, e, "hueshift"), self.get_num(v, e, "saturation"), None)
     }
 
@@ -1105,15 +1105,12 @@ impl Skin {
         self.mark_holes(v, e, c, &bg, b, clip);
     }
 
-    /// Where a subview's transparencyColor leaves the window open, a button or slider image painted
-    /// in that same colour is cut too (WMP keyed the composed window). A VIEW's own keys already
-    /// cut the whole window. A subview drawn into a layer (alphaBlend below 255) sees only the
-    /// layer's pixels, so it can record a hole over something solid in the window below.
+    /// Records where a subview's transparencyColor leaves the window open and where its picture
+    /// covers it; a button or slider drawn over the open part is cut later. A VIEW's own keys
+    /// already cut the whole window, so its picture only covers (Radio's frame over the tray
+    /// behind it).
     fn mark_holes(&self, v: ViewId, e: usize, c: &mut Canvas, bg: &SkinBitmap, b: Rect, clip: Rect) {
-        let key = parse_color(&self.get_str(v, e, "transparencycolor"));
-        if e == 0 || (key.is_none() && !c.has_holes()) {
-            return;
-        }
+        let key = parse_color(&self.get_str(v, e, "transparencycolor")).filter(|_| e != 0);
         let raw = key.and_then(|_| self.images.get_raw(&self.get_str(v, e, "backgroundimage")));
         c.mark_holes(b.intersect(&clip), |x, y| {
             let (ix, iy) = self.background_pixel(v, e, bg, x - b.x, y - b.y);

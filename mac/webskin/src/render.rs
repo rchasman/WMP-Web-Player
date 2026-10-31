@@ -51,11 +51,13 @@ pub struct Canvas {
     /// The logical point at the pixmap's top-left: not (0, 0) when drawing one region of a view.
     pub origin: (f64, f64),
     /// Per device pixel, the transparencyColor a subview left open there with nothing under it
-    /// (stored with [`HOLE`] set, so black is a key too). Shared with this canvas's layers.
+    /// (stored with [`HOLE`] set, so black is a key too), or [`COVERED`] once a background filled
+    /// it. Shared with this canvas's layers, which can't see the pixels drawn below them.
     holes: Rc<RefCell<Vec<u32>>>,
 }
 
 const HOLE: u32 = 1 << 24;
+const COVERED: u32 = 1 << 25;
 
 /// What a subview's background is at one of its pixels.
 pub enum Backdrop {
@@ -234,36 +236,30 @@ impl Canvas {
             for x in d.left() as usize..(d.right() as usize).min(w) {
                 let i = y * w + x;
                 match at((x as f64 + 0.5) / s + self.origin.0, ly) {
-                    Backdrop::Open(key) if pixels[i].alpha() == 0 => {
+                    Backdrop::Outside => {}
+                    Backdrop::Open(_) if pixels[i].alpha() > 0 || holes.get(i) == Some(&COVERED) => {}
+                    b => {
                         if holes.is_empty() {
                             holes.resize(pixels.len(), 0);
                         }
-                        holes[i] = key | HOLE;
+                        holes[i] = if let Backdrop::Open(key) = b { key | HOLE } else { COVERED };
                     }
-                    Backdrop::Covered if !holes.is_empty() => holes[i] = 0,
-                    _ => {}
                 }
             }
         }
     }
 
-    pub fn has_holes(&self) -> bool {
-        !self.holes.borrow().is_empty()
-    }
-
     /// Something drawn over `area` fills the holes there.
     pub fn cover_holes(&mut self, area: Rect) {
-        if self.has_holes() {
-            self.mark_holes(area, |_, _| Backdrop::Covered);
-        }
+        self.mark_holes(area, |_, _| Backdrop::Covered);
     }
 
-    /// Clears the opaque pixels drawn in a hole's own colour: WMP keyed the composed window, so
-    /// a button painted in that colour over the hole was cut too.
+    /// Clears whatever was drawn over a hole: WMP shaped the window from the backgrounds, so a
+    /// button or slider painted where they are open was cut.
     pub fn cut_holes(&mut self) {
         let holes = self.holes.borrow();
         for (p, &h) in self.pixmap.pixels_mut().iter_mut().zip(holes.iter()) {
-            if h != 0 && p.alpha() == 255 && matches_key(u32::from(p.red()) << 16 | u32::from(p.green()) << 8 | u32::from(p.blue()), h & !HOLE) {
+            if h & HOLE != 0 {
                 *p = tiny_skia::PremultipliedColorU8::TRANSPARENT;
             }
         }

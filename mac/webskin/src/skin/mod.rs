@@ -1029,10 +1029,11 @@ mod tests {
         assert_eq!(hole_hit, Some(screen));
     }
 
-    /// World of Warcraft's sliders paint the body's magenta key where the body is open; WMP cut
-    /// that from the window.
+    /// WMP shaped the window from the backgrounds: a control drawn where a keyed background is
+    /// open was cut, whatever its colour (World of Warcraft's magenta slider ends, xXx's lime
+    /// button corners, both checked against real WMP).
     #[test]
-    fn a_key_colour_painted_over_a_subview_hole_is_cut() {
+    fn a_control_painted_over_a_subview_hole_is_cut() {
         let dir = temp_dir("holes");
         let (key, grey, blue) = (image::Rgba([0, 255, 0, 255]), image::Rgba([90, 90, 90, 255]), image::Rgba([0, 0, 255, 255]));
         // Columns 0-9 the body's key (open), 10-19 the body.
@@ -1059,12 +1060,58 @@ mod tests {
         let canvas = shared.read(|s| s.render_view(v, 2.0)).unwrap();
         let rgba = |x: u32, y: u32| canvas.pixmap.pixel(x * 2, y * 2).map(|p| (p.red(), p.green(), p.blue(), p.alpha()));
         assert_eq!(rgba(2, 2), Some((0, 0, 0, 0)), "the key painted over the hole is cut");
-        assert_eq!(rgba(7, 2), Some((0, 0, 255, 255)), "other colours over the hole stay");
+        assert_eq!(rgba(7, 2), Some((0, 0, 0, 0)), "other colours over the hole are cut too");
         assert_eq!(rgba(12, 2), Some((0, 255, 0, 255)), "the key painted over the body stays");
         assert_eq!(rgba(7, 7), Some((0, 0, 0, 0)), "the hole itself");
         assert_eq!(rgba(2, 7), Some((0, 255, 0, 255)), "a subview filling the hole covers it");
         let part = shared.read(|s| s.render_region(v, 2.0, Rect::new(0.0, 0.0, 10.0, 5.0))).unwrap();
         assert_eq!(part.pixmap.pixel(4, 4).map(|p| p.alpha()), Some(0), "a redrawn region cuts it too");
+    }
+
+    /// Need for Speed Underground fades keyed pieces in over its body; drawn in a layer, a
+    /// piece's key over the solid body is no hole.
+    #[test]
+    fn a_fading_subview_leaves_no_hole_over_the_body_below() {
+        let dir = temp_dir("fade_holes");
+        let (key, grey, blue) = (image::Rgba([255, 0, 255, 255]), image::Rgba([90, 90, 90, 255]), image::Rgba([0, 0, 255, 255]));
+        image::RgbaImage::from_pixel(10, 10, grey).save(dir.join("body.png")).unwrap();
+        image::RgbaImage::from_pixel(10, 10, key).save(dir.join("piece.png")).unwrap();
+        image::RgbaImage::from_pixel(10, 10, blue).save(dir.join("button.png")).unwrap();
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="10" height="10" backgroundColor="none" titleBar="false">
+                 <SUBVIEW id="body" backgroundImage="body.png" transparencyColor="#FF00FF"/>
+                 <SUBVIEW id="piece" zIndex="1" backgroundImage="piece.png" transparencyColor="#FF00FF" alphaBlend="128"/>
+                 <BUTTON id="b" zIndex="2" image="button.png"/>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        let canvas = shared.read(|s| s.render_view(v, 1.0)).unwrap();
+        assert_eq!(canvas.pixmap.pixel(5, 5).map(|p| (p.blue(), p.alpha())), Some((255, 255)));
+    }
+
+    /// Radio keeps its drawer behind the view's frame; the frame covers the drawer's key.
+    #[test]
+    fn a_view_picture_covers_the_holes_of_children_behind_it() {
+        let dir = temp_dir("view_covers");
+        let (key, grey, blue) = (image::Rgba([255, 0, 255, 255]), image::Rgba([90, 90, 90, 255]), image::Rgba([0, 0, 255, 255]));
+        image::RgbaImage::from_pixel(10, 10, grey).save(dir.join("frame.png")).unwrap();
+        image::RgbaImage::from_pixel(10, 10, key).save(dir.join("tray.png")).unwrap();
+        image::RgbaImage::from_pixel(10, 10, blue).save(dir.join("button.png")).unwrap();
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="10" height="10" backgroundImage="frame.png" titleBar="false">
+                 <SUBVIEW id="tray" zIndex="-1" backgroundImage="tray.png" transparencyColor="#FF00FF"/>
+                 <BUTTON id="b" zIndex="1" image="button.png"/>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        let canvas = shared.read(|s| s.render_view(v, 1.0)).unwrap();
+        assert_eq!(canvas.pixmap.pixel(5, 5).map(|p| (p.blue(), p.alpha())), Some((255, 255)));
     }
 
     /// YIL Online Music Awards' speakers were saved from a 16-bit desktop: their key colour
