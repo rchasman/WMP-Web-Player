@@ -100,8 +100,8 @@ public partial class App : Application
         if (live >= 0 && e.Args.Length > live + 2)
         {
             double secs = e.Args.Length > live + 3 && double.TryParse(e.Args[live + 3], System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : 6;
-            await LiveTestRunner.RunAsync(e.Args[live + 1], e.Args[live + 2], secs);
-            Shutdown();
+            int faults = await LiveTestRunner.RunAsync(e.Args[live + 1], e.Args[live + 2], secs);
+            Shutdown(faults > 0 ? 1 : 0);
             return;
         }
 

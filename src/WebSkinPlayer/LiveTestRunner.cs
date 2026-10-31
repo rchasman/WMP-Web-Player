@@ -12,15 +12,16 @@ namespace WebSkinPlayer;
 /// <summary>
 /// "--test-live &lt;folder|file&gt; &lt;outDir&gt; [seconds]": opens each skin for real but hidden and
 /// sandboxed (scripts, timers, GIF animations, player events all run; nothing reaches the real
-/// player) with a song playing, saves every window it opens, and measures how much of every
-/// visualizer area is actually visible.
+/// player) with a song playing, saves every window it opens, measures how much of every visualizer
+/// area is actually visible, and checks that every control it shows can be clicked. Returns the
+/// number of controls out of reach.
 /// </summary>
 public static class LiveTestRunner
 {
     /// <summary>Seconds the song has played in the skin being tested.</summary>
     static double _elapsed;
 
-    public static async Task RunAsync(string source, string outDir, double seconds)
+    public static async Task<int> RunAsync(string source, string outDir, double seconds)
     {
         Sandbox.Enabled = true;
         Directory.CreateDirectory(outDir);
@@ -38,6 +39,7 @@ public static class LiveTestRunner
         }, () => TimeSpan.FromSeconds(40 + _elapsed));
         var report = new StringBuilder();
         var counts = new Dictionary<string, int>();
+        int faults = 0;
         foreach (var file in files)
         {
             string name = Path.GetFileNameWithoutExtension(file);
@@ -67,7 +69,13 @@ public static class LiveTestRunner
                 foreach (var (view, i) in theme.OpenViews.ToList().Select((v, i) => (v, i)))
                 {
                     string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
-                    Save(Render(view), Path.Combine(outDir, $"{name}.{id}.png"));
+                    var window = Render(view);
+                    Save(window, Path.Combine(outDir, $"{name}.{id}.png"));
+                    foreach (var fault in ControlsOutOfReach(view, window))
+                    {
+                        faults++;
+                        lines.Add($"    FAULT view {id}: {fault}");
+                    }
                 }
             }
             catch (Exception ex)
@@ -85,10 +93,69 @@ public static class LiveTestRunner
             await Task.Delay(50);
         }
         report.Insert(0, $"{files.Count} skins after {seconds}s live: " + string.Join(", ", counts.OrderBy(k => k.Key).Select(k => $"{k.Value} {k.Key}")) +
+            $"; {faults} control(s) out of reach" +
             Environment.NewLine + "OK = visualizer visible; PARTLY/COVERED = drawn under other elements; HIDDEN/FADED = hidden or faded out by the skin until a button or mode shows it" +
             Environment.NewLine + Environment.NewLine);
         File.WriteAllText(Path.Combine(outDir, "live-report.txt"), report.ToString());
+        return faults;
     }
+
+    /// <summary>
+    /// Controls that show in the window but take no click at any pixel they show: something transparent to
+    /// the eye lies over them, or the window is see-through there. A control another part covers (a closed
+    /// drawer, an intro screen) shows nowhere and is left alone, and so is what shows through a slider: a
+    /// slider takes clicks across its whole rectangle, like a Windows trackbar.
+    /// </summary>
+    static List<string> ControlsOutOfReach(SkinView view, BitmapSource window)
+    {
+        var shownPx = Pixels(window, out int w, out int h);
+        var faults = new List<string>();
+        foreach (var e in view.AllElements.Where(e => TakesClicks(e) && e.IsEffectivelyVisible).ToList())
+        {
+            var group = e is GroupButtonElement && e.Parent is ButtonGroupElement g ? g : null;
+            SkinElement owner = group ?? e;
+            var b = owner.AbsoluteBounds;
+            var area = b;
+            for (var p = owner.Parent; p != null; p = p.Parent) if (p.ClipsChildren) area.Intersect(p.AbsoluteBounds);
+            area.Intersect(new Rect(0, 0, w, h));
+            if (area.IsEmpty) continue;
+            int x0 = (int)Math.Ceiling(area.Left), y0 = (int)Math.Ceiling(area.Top), x1 = (int)Math.Floor(area.Right), y1 = (int)Math.Floor(area.Bottom);
+            if (x1 <= x0 || y1 <= y0) continue;
+            var rect = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
+            var with = view.RenderArea(rect);
+            var without = view.RenderArea(rect, e);
+            var takers = new Dictionary<string, int>();
+            bool reached = false;
+            for (int y = y0; y < y1 && !reached; y++)
+                for (int x = x0; x < x1 && !reached; x++)
+                {
+                    var local = new Point(x + 0.5 - b.X, y + 0.5 - b.Y);
+                    bool own = group != null ? group.ElementAt(local) == e : e.HitTest(local);
+                    int j = (y - y0) * rect.Width + (x - x0);
+                    if (!own || with[j] == without[j]) continue;
+                    var taker = view.HitTestPoint(new Point(x + 0.5, y + 0.5));
+                    if (taker != null && taker != e && taker is SliderElement) continue;
+                    bool opaque = (shownPx[y * w + x] >>> 24) > 0;
+                    if (taker == e && opaque) { reached = true; continue; }
+                    string by = opaque && taker != null ? Label(taker) : "see-through window";
+                    takers[by] = takers.GetValueOrDefault(by) + 1;
+                }
+            if (reached || takers.Count == 0) continue;
+            var most = takers.MaxBy(t => t.Value);
+            faults.Add($"{Label(e)} shows in {takers.Values.Sum()} pixels but can't be clicked: {most.Key} takes them");
+        }
+        return faults;
+    }
+
+    static readonly string[] ClickHandlers = { "onclick", "onmousedown", "onmouseup", "ondblclick" };
+
+    /// <summary>A control meant to be clicked now: enabled, not a passThrough mirror of another, and a button only when clicking it does something.</summary>
+    static bool TakesClicks(SkinElement e) =>
+        e is ButtonElement or GroupButtonElement or SliderElement or CustomSliderElement
+        && !e.GetBool("passthrough") && e.Enabled
+        && (e is SliderElement or CustomSliderElement || ButtonPresets.For(e.Tag) != null || ClickHandlers.Any(e.HasHandler));
+
+    static string Label(SkinElement e) => e.Id != null ? $"<{e.Tag} id={e.Id}>" : $"<{e.Tag}> at {e.AbsoluteBounds.X:0},{e.AbsoluteBounds.Y:0}";
 
     static int Rank(string s) => s switch { "OK" => 5, "PARTLY" => 4, "COVERED" => 3, "HIDDEN" or "FADED" => 2, "FAILED" => 1, _ => 0 };
 

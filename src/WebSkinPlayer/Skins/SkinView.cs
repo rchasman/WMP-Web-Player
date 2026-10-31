@@ -595,10 +595,12 @@ public sealed class SkinView : SubviewElement
 
     bool UsesCompositeMask => !GetBool("titlebar") && Width > 0 && Height > 0;
 
+    /// <summary>A VIEW's keys cut the window only without a title bar; otherwise its clipping mask shapes it.</summary>
+    bool ShapedByClipMask => GetBool("titlebar") || !KeysWindow;
+
     public void RenderTree(DrawingContext dc)
     {
-        // A VIEW's keys cut the window only without a title bar; otherwise its clipping mask shapes it.
-        bool viewMask = GetBool("titlebar") || !KeysWindow;
+        bool viewMask = ShapedByClipMask;
         if (UsesCompositeMask)
         {
             EnsureCompositeMask(viewMask);
@@ -654,10 +656,18 @@ public sealed class SkinView : SubviewElement
         _compositeMask = brush;
     }
 
-    /// <summary>A software render of the view: the elements in the order they drew, and where to stop.</summary>
+    /// <summary>
+    /// A software render of <paramref name="area"/> with nothing cut, leaving out <paramref name="hidden"/>
+    /// without changing it (the test run's window checks compare the two).
+    /// </summary>
+    public int[] RenderArea(Int32Rect area, SkinElement? hidden = null) =>
+        RenderPixels(area, ShapedByClipMask, new DrawPass { Hidden = hidden });
+
+    /// <summary>A software render of the view: the elements in the order they drew, where to stop, and one to leave out.</summary>
     sealed class DrawPass
     {
         public SkinElement? StopAfter;
+        public SkinElement? Hidden;
         public bool Stopped;
         public readonly List<(SkinElement El, bool Backdrop)> Steps = new();
     }
@@ -739,7 +749,7 @@ public sealed class SkinView : SubviewElement
     void RenderElement(DrawingContext dc, SkinElement e, bool viewMask = true, DrawPass? pass = null)
     {
         // A VIEW is the window itself; WMP ignored visible="false" on it.
-        if ((!e.Visible && e != this) || pass?.Stopped == true) return;
+        if ((!e.Visible && e != this) || pass?.Stopped == true || (pass != null && e == pass.Hidden)) return;
         var b = e == this ? new Rect(0, 0, Width, Height) : e.AbsoluteBounds;
         int pushes = 0;
         double op = e.Opacity;
