@@ -91,6 +91,9 @@ public sealed class SkinView : SubviewElement
     readonly bool _forPreview;
     public IEnumerable<SkinElement> AllElements => _all;
 
+    /// <summary>When set, animated GIFs show the frame of that moment: the test run's window checks compare several pictures of one moment.</summary>
+    public DateTime? HeldAt { get; set; }
+
     protected override object? ElementDefault(string name) => name.ToLowerInvariant() switch
     {
         "titlebar" => true,

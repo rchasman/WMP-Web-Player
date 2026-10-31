@@ -392,7 +392,7 @@ public class SkinElement : ScriptObject
     protected ImageSource FrameOf(SkinBitmap bmp, string key)
     {
         if (!bmp.IsAnimated) return bmp.Source;
-        var now = DateTime.UtcNow;
+        var now = View.HeldAt ?? DateTime.UtcNow;
         if (!_animStart.TryGetValue(key, out var start)) _animStart[key] = start = now;
         var frame = bmp.FrameAt((now - start).TotalMilliseconds, out double next);
         if (next >= 0) View.RequestAnimationFrame(next);

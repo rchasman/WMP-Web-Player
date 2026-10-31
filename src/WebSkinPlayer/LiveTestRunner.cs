@@ -70,11 +70,16 @@ public static class LiveTestRunner
                 {
                     string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
                     Save(Render(view), Path.Combine(outDir, $"{name}.{id}.png"));
-                    foreach (var fault in ControlsOutOfReach(view))
+                    view.HeldAt = DateTime.UtcNow;
+                    try
                     {
-                        faults++;
-                        lines.Add($"    FAULT view {id}: {fault}");
+                        foreach (var fault in ControlsOutOfReach(view))
+                        {
+                            faults++;
+                            lines.Add($"    FAULT view {id}: {fault}");
+                        }
                     }
+                    finally { view.HeldAt = null; }
                 }
             }
             catch (Exception ex)
