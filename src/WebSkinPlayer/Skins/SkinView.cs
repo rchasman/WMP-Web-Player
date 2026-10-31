@@ -721,15 +721,15 @@ public sealed class SkinView : SubviewElement
         return px;
     }
 
-    const int HoleBit = 1 << 24;
+    const int HoleBit = 1 << 24, CoveredBit = 1 << 25;
 
     /// <summary>
     /// Per pixel, the transparencyColor a subview left open there with nothing under it (with <see cref="HoleBit"/>
-    /// set, so a black key counts), or 0. Replays
+    /// set, so a black key counts), <see cref="CoveredBit"/> once a background or fill covered it, or 0. Replays
     /// <paramref name="drawn"/>: a subview's picture opens holes where it shows its key over nothing and covers
     /// where it is visible; a backgroundColor, EFFECTS and VIDEO cover too
-    /// (WMP showed visualizations and video in windows of their own, never keyed with the skin). WMP shaped the
-    /// window from the backgrounds, so whatever is drawn over a hole is cut. Null
+    /// (WMP showed visualizations and video in windows of their own, never keyed with the skin). A covered pixel
+    /// stays covered. WMP shaped the window from the backgrounds, so whatever is drawn over a hole is cut. Null
     /// when there is none.
     /// </summary>
     int[]? FindHoles(DrawPass drawn, int[] final, int w, int h, bool viewMask, SkinElement? hidden)
@@ -756,7 +756,7 @@ public sealed class SkinView : SubviewElement
                 Enumerable.Range(area.Y, area.Height).SelectMany(y => Enumerable.Range(area.X, area.Width).Select(x => y * w + x));
             if (opener == null)
             {
-                foreach (int i in Pixels()) holes[i] = 0;
+                foreach (int i in Pixels()) holes[i] = CoveredBit;
                 continue;
             }
             if (opener.BackdropMap() is not { } at) continue;
@@ -764,12 +764,12 @@ public sealed class SkinView : SubviewElement
             var looks = Pixels().Select(i => (i, at(new Point(i % w + 0.5 - bounds.X, i / w + 0.5 - bounds.Y)))).ToArray();
             // What is drawn under an open pixel only matters where the finished window shows something there to
             // cut, so most keyed subviews need no extra render.
-            bool matters = looks.Any(l => l.Item2 == Backdrop.Open && (final[l.i] >>> 24) > 0);
+            bool matters = looks.Any(l => l.Item2 == Backdrop.Open && holes[l.i] != CoveredBit && (final[l.i] >>> 24) > 0);
             int[]? under = matters ? RenderPixels(area, viewMask, new DrawPass { StopAfter = opener, Hidden = hidden }) : null;
             foreach (var (i, look) in looks)
             {
-                if (look == Backdrop.Covered) holes[i] = 0;
-                else if (look == Backdrop.Open && key is int k && under != null &&
+                if (look == Backdrop.Covered) holes[i] = CoveredBit;
+                else if (look == Backdrop.Open && key is int k && under != null && holes[i] != CoveredBit &&
                          (under[(i / w - area.Y) * area.Width + i % w - area.X] >>> 24) == 0)
                 {
                     holes[i] = k | HoleBit;
