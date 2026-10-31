@@ -595,6 +595,19 @@ public sealed class SkinView : SubviewElement
 
     bool UsesCompositeMask => !GetBool("titlebar") && Width > 0 && Height > 0;
 
+    bool HasKeyedSubview => _all.Any(e => e is SubviewElement s && Shown(s) &&
+        SkinImages.ParseColor(s.GetString("transparencycolor")) != null && s.GetString("backgroundimage").Length > 0);
+
+    /// <summary>Whether anything shown may paint magenta. Visualizations and video are left out: WMP never keyed them.</summary>
+    bool MayShowMagenta => _all.Prepend(this).Any(e => e is not EffectsElement && Shown(e) && e.MayPaint(Magenta));
+
+    /// <summary>Visible up to the VIEW, whose own visible="false" WMP ignored.</summary>
+    static bool Shown(SkinElement e)
+    {
+        for (SkinElement? p = e; p is { } and not SkinView; p = p.Parent) if (!p.Visible) return false;
+        return true;
+    }
+
     /// <summary>A VIEW's keys cut the window only without a title bar; otherwise its clipping mask shapes it.</summary>
     bool ShapedByClipMask => GetBool("titlebar") || !KeysWindow;
 
@@ -631,6 +644,9 @@ public sealed class SkinView : SubviewElement
         }
         _maskDirty = false;
         _maskBuilt = DateTime.UtcNow;
+        // A window keyed only by magenta needs no software render while nothing shown can paint it: New Super
+        // Mario Bros redraws ten times a second and shows none.
+        if (!KeysWindow && !HasKeyedSubview && !MayShowMagenta) { _compositeMask = null; return; }
         int w = Math.Min(4000, Width), h = Math.Min(4000, Height);
         var drawn = new DrawPass();
         var px = RenderPixels(new Int32Rect(0, 0, w, h), viewMask, drawn);

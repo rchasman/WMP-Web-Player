@@ -79,6 +79,22 @@ public sealed class SkinBitmap
     /// <summary>Drawn alpha at x,y (0 when outside).</summary>
     public int Alpha(int x, int y) => (uint)x < (uint)Width && (uint)y < (uint)Height ? (Pixels[y * Width + x] >>> 24) : 0;
 
+    readonly Dictionary<int, bool> _shows = new();
+
+    /// <summary>Whether any frame of the image has an opaque pixel of <paramref name="rgb"/> or one of its 16-bit forms.</summary>
+    public bool Shows(int rgb)
+    {
+        if (_shows.TryGetValue(rgb, out bool known)) return known;
+        bool In(int[] px) => px.Any(c => (c >>> 24) == 255 && SkinImages.MatchesKey(c & 0xFFFFFF, rgb));
+        bool InFrame(BitmapSource f)
+        {
+            var px = new int[f.PixelWidth * f.PixelHeight];
+            f.CopyPixels(px, f.PixelWidth * 4, 0);
+            return In(px);
+        }
+        return _shows[rgb] = In(Pixels) || (Frames ?? []).Skip(1).Any(InFrame);
+    }
+
     /// <summary>Alpha at x,y in one of this image's frames (0 when outside).</summary>
     public int Alpha(BitmapSource frame, int x, int y)
     {

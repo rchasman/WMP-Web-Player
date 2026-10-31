@@ -241,6 +241,20 @@ public class SkinElement : ScriptObject
     public bool UsesMouse => CurrentToolTip != null || MouseHandlers.Any(h =>
         HasHandler(h) || (Values.TryGetValue(h, out var v) && v is Jint.Native.Function.Function));
 
+    static readonly HashSet<string> UndrawnAttributes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "transparencycolor", "clippingcolor", "clippingimage", "mappingimage", "positionimage",
+    };
+
+    /// <summary>
+    /// Whether the element may paint <paramref name="rgb"/>: one of its colours is that colour, or a picture it
+    /// draws has an opaque pixel of it (keyed as drawn).
+    /// </summary>
+    public bool MayPaint(int rgb) => Values.Any(kv => kv.Value is string v && v.Length > 0 && !UndrawnAttributes.Contains(kv.Key) && (
+        (kv.Key.EndsWith("color", StringComparison.OrdinalIgnoreCase) && SkinImages.ParseColor(v) is int c && SkinImages.MatchesKey(c, rgb)) ||
+        (kv.Key.EndsWith("image", StringComparison.OrdinalIgnoreCase) &&
+         View.Theme.Images.Get(v, SkinImages.ParseColor(GetString("transparencycolor")), GetNumber("hueshift"), GetNumber("saturation")) is { } img && img.Shows(rgb))));
+
     /// <summary>Whether a click here should be handled by the element rather than drag the window.</summary>
     public virtual bool IsInteractive =>
         HasHandler("onclick") || HasHandler("onmousedown") || HasHandler("onmouseup") || HasHandler("ondblclick");
