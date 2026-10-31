@@ -264,6 +264,23 @@ public sealed class MediaBridge : IDisposable
 
     void Publish(MediaSnapshot snap)
     {
+        if (_simulated == null) Show(snap);
+    }
+
+    Func<TimeSpan>? _simulated;
+
+    /// <summary>
+    /// Test hook: shows <paramref name="snap"/> at <paramref name="position"/> instead of the system's media
+    /// sessions, so a test run can play a song on a machine with no sound device.
+    /// </summary>
+    public void Simulate(MediaSnapshot snap, Func<TimeSpan> position)
+    {
+        _simulated = position;
+        Show(snap);
+    }
+
+    void Show(MediaSnapshot snap)
+    {
         var old = Current;
         Current = snap;
         bool track = old.Title != snap.Title || old.Artist != snap.Artist || old.SourceApp != snap.SourceApp || !ReferenceEquals(old.Artwork, snap.Artwork);
@@ -300,6 +317,7 @@ public sealed class MediaBridge : IDisposable
     {
         get
         {
+            if (_simulated is { } simulated) return simulated();
             var t = _timeline;
             if (t == null) return TimeSpan.Zero;
             if (_seekTarget is { } target)

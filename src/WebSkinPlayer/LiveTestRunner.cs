@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using WebSkinPlayer.Media;
 using WebSkinPlayer.Skins;
 using WebSkinPlayer.Skins.Elements;
 
@@ -11,10 +12,14 @@ namespace WebSkinPlayer;
 /// <summary>
 /// "--test-live &lt;folder|file&gt; &lt;outDir&gt; [seconds]": opens each skin for real but hidden and
 /// sandboxed (scripts, timers, GIF animations, player events all run; nothing reaches the real
-/// player), waits, then measures how much of every visualizer area is actually visible.
+/// player) with a song playing, waits, then measures how much of every visualizer area is actually
+/// visible.
 /// </summary>
 public static class LiveTestRunner
 {
+    /// <summary>Seconds the song has played in the skin being tested.</summary>
+    static double _elapsed;
+
     public static async Task RunAsync(string source, string outDir, double seconds)
     {
         Sandbox.Enabled = true;
@@ -22,6 +27,15 @@ public static class LiveTestRunner
         var files = Directory.Exists(source)
             ? Directory.EnumerateFiles(source, "*.wmz").OrderBy(f => f).ToList()
             : new List<string> { source };
+        // A song playing, as skins are used and as their authors took their preview screenshots: skins
+        // that draw their time from currentPosition_onchange need it moving.
+        App.Services.Media.Simulate(new MediaSnapshot
+        {
+            Title = "Glue", Artist = "Bicep", Album = "Bicep", SourceApp = "Spotify", SourceDisplayName = "Spotify",
+            Status = MediaStatus.Playing, Duration = TimeSpan.FromSeconds(269),
+            CanPlay = true, CanPause = true, CanStop = true, CanNext = true, CanPrevious = true, CanSeek = true,
+            CanFastForward = true, CanRewind = true, CanShuffle = true, CanRepeat = true,
+        }, () => TimeSpan.FromSeconds(40 + _elapsed));
         var report = new StringBuilder();
         var counts = new Dictionary<string, int>();
         foreach (var file in files)
@@ -32,15 +46,19 @@ public static class LiveTestRunner
             string status = "NO-VIS";
             try
             {
+                _elapsed = 0;
                 theme = SkinTheme.Load(file);
                 theme.OpenMainView();
-                // Hidden windows never paint, so draw periodically like the real window would
-                // (this is what starts and advances GIF animations).
-                for (double t = 0; t < seconds; t += 0.5)
+                // Hidden windows never paint, so draw every 100 ms like the real window would (this is what
+                // starts and advances GIF animations), with the song moving on.
+                for (int step = 1; step <= Math.Round(seconds * 10); step++)
                 {
+                    _elapsed = step / 10.0;
+                    await Task.Delay(100);
                     foreach (var v in theme.OpenViews.ToList()) Render(v);
-                    await Task.Delay(500);
                 }
+                // Past the mask rebuild limit, so the windows below are cut as they are now.
+                await Task.Delay(150);
                 foreach (var view in theme.OpenViews.ToList())
                 {
                     var result = Analyze(view, lines);

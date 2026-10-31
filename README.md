@@ -265,6 +265,7 @@ check it for updates; local builds don't.
   lists script errors.
 - `WebSkinPlayer.exe --test-live <folder|file> <outDir> [seconds]` opens each skin for real but hidden and sandboxed.
   Scripts, timers, GIFs, and player events all run, but nothing reaches your player, volume, browser, or settings.
+  A made-up song plays (Glue by Bicep, moving on from 0:40), so skins that draw the time from its position show it.
   Afterwards it measures how much of every visualizer area is actually visible, and for a covered one names what is
   drawn over it (`live-report.txt`).
 - `WebSkinPlayer.exe --automate script.txt` replays commands through the real input code:
