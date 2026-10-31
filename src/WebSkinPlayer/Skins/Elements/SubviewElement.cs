@@ -114,6 +114,12 @@ public class SubviewElement : SkinElement
     }
 
     /// <summary>
+    /// The colour that leaves this subview's background open (its transparencyColor), or null. WMP's dynamic
+    /// images (album art) are not the skin's own pixels, so they never match its key.
+    /// </summary>
+    public int? HoleKey => SkinImages.IsDynamic(GetString("backgroundimage")) ? null : SkinImages.ParseColor(GetString("transparencycolor"));
+
+    /// <summary>
     /// What the background image shows at each point of this subview, looked up as <see cref="Render"/>
     /// draws it (stretched, tiled or plain), or null when it has no image.
     /// </summary>
@@ -121,8 +127,7 @@ public class SubviewElement : SkinElement
     {
         var bg = Background;
         if (bg == null || Width <= 0 || Height <= 0) return null;
-        // WMP's dynamic images (album art) are not the skin's own pixels, so they never match its key.
-        int? key = SkinImages.IsDynamic(GetString("backgroundimage")) ? null : SkinImages.ParseColor(GetString("transparencycolor"));
+        int? key = HoleKey;
         var pixel = PixelLookup(bg);
         return local =>
         {

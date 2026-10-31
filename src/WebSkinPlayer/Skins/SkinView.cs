@@ -679,8 +679,8 @@ public sealed class SkinView : SubviewElement
         {
             int c = px[i];
             int a = (c >>> 24) & 255, rgb = c & 0xFFFFFF, hole = holes?[i] ?? 0;
-            cut[i] = a == 255 && ((clip is int ck && SkinImages.MatchesKey(rgb, ck)) || (trans is int tk && SkinImages.MatchesKey(rgb, tk)) ||
-                (hole != 0 && SkinImages.MatchesKey(rgb, hole & 0xFFFFFF)) || SkinImages.MatchesKey(rgb, Magenta));
+            cut[i] = (hole & HoleBit) != 0 || (a == 255 && ((clip is int ck && SkinImages.MatchesKey(rgb, ck)) ||
+                (trans is int tk && SkinImages.MatchesKey(rgb, tk)) || SkinImages.MatchesKey(rgb, Magenta)));
             any |= cut[i];
         }
         return (px, any ? cut : null, w, h);
@@ -724,24 +724,25 @@ public sealed class SkinView : SubviewElement
     const int HoleBit = 1 << 24;
 
     /// <summary>
-    /// Per pixel, the transparencyColor a subview left open there with nothing under it (with
-    /// <see cref="HoleBit"/> set, so a black key counts), or 0. Replays <paramref name="drawn"/>: a
-    /// subview's image opens holes where it shows its key over nothing and fills them where it is
-    /// visible; its backgroundColor, EFFECTS and VIDEO fill them too (WMP showed visualizations and
-    /// video in windows of their own, never keyed with the skin). Null when there is none.
+    /// Per pixel, the transparencyColor a subview left open there with nothing under it (with <see cref="HoleBit"/>
+    /// set, so a black key counts), or 0. Replays
+    /// <paramref name="drawn"/>: a subview's picture opens holes where it shows its key over nothing and covers
+    /// where it is visible; a backgroundColor, EFFECTS and VIDEO cover too
+    /// (WMP showed visualizations and video in windows of their own, never keyed with the skin). WMP shaped the
+    /// window from the backgrounds, so whatever is drawn over a hole is cut. Null
+    /// when there is none.
     /// </summary>
     int[]? FindHoles(DrawPass drawn, int[] final, int w, int h, bool viewMask, SkinElement? hidden)
     {
-        // A hole is cut only where the window shows its key, so most views need no search at all.
-        var keys = drawn.Steps.Select(s => s.El).OfType<SubviewElement>().Where(s => s != this)
-            .Select(s => SkinImages.ParseColor(s.GetString("transparencycolor"))).OfType<int>().Distinct().ToArray();
-        if (!final.Any(c => (c >>> 24) == 255 && keys.Any(k => SkinImages.MatchesKey(c & 0xFFFFFF, k)))) return null;
-        int[]? holes = null;
+        if (!drawn.Steps.Any(s => !s.Backdrop && s.El != this && s.El is SubviewElement { HoleKey: not null })) return null;
+        var holes = new int[w * h];
+        bool any = false;
         var view = new Rect(0, 0, w, h);
         foreach (var (el, backdrop) in drawn.Steps)
         {
             bool fills = backdrop ? el is SubviewElement { BackgroundColor: not null } : el is EffectsElement;
-            var opener = !backdrop && el is SubviewElement sub && sub != this ? sub : null;
+            // The VIEW is drawn first and its keys cut the whole window, so its picture opens nothing.
+            var opener = !backdrop && el is SubviewElement sv && sv != this ? sv : null;
             if (!fills && opener == null) continue;
             var bounds = el.AbsoluteBounds;
             var shown = bounds;
@@ -755,28 +756,28 @@ public sealed class SkinView : SubviewElement
                 Enumerable.Range(area.Y, area.Height).SelectMany(y => Enumerable.Range(area.X, area.Width).Select(x => y * w + x));
             if (opener == null)
             {
-                if (holes != null) foreach (int i in Pixels()) holes[i] = 0;
+                foreach (int i in Pixels()) holes[i] = 0;
                 continue;
             }
-            int? key = SkinImages.ParseColor(opener.GetString("transparencycolor"));
-            if ((key == null && holes == null) || opener.BackdropMap() is not { } at) continue;
+            if (opener.BackdropMap() is not { } at) continue;
+            int? key = opener.HoleKey;
             var looks = Pixels().Select(i => (i, at(new Point(i % w + 0.5 - bounds.X, i / w + 0.5 - bounds.Y)))).ToArray();
-            // What is drawn under the open pixels only matters where the final window shows the key
-            // or an earlier hole could be replaced, so most keyed subviews need no extra render.
-            bool open = looks.Any(l => l.Item2 == Backdrop.Open);
-            bool matters = open && key is int openKey && looks.Any(l => holes?[l.i] is > 0 || ((final[l.i] >>> 24) == 255 && SkinImages.MatchesKey(final[l.i] & 0xFFFFFF, openKey)));
+            // What is drawn under an open pixel only matters where the finished window shows something there to
+            // cut, so most keyed subviews need no extra render.
+            bool matters = looks.Any(l => l.Item2 == Backdrop.Open && (final[l.i] >>> 24) > 0);
             int[]? under = matters ? RenderPixels(area, viewMask, new DrawPass { StopAfter = opener, Hidden = hidden }) : null;
             foreach (var (i, look) in looks)
             {
-                if (look == Backdrop.Open && key is int k && under != null && (under[(i / w - area.Y) * area.Width + i % w - area.X] >>> 24) == 0)
+                if (look == Backdrop.Covered) holes[i] = 0;
+                else if (look == Backdrop.Open && key is int k && under != null &&
+                         (under[(i / w - area.Y) * area.Width + i % w - area.X] >>> 24) == 0)
                 {
-                    holes ??= new int[w * h];
                     holes[i] = k | HoleBit;
+                    any = true;
                 }
-                else if (look == Backdrop.Covered && holes != null) holes[i] = 0;
             }
         }
-        return holes;
+        return any ? holes : null;
     }
 
     void RenderElement(DrawingContext dc, SkinElement e, bool viewMask = true, DrawPass? pass = null)
