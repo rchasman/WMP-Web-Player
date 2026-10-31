@@ -266,8 +266,8 @@ check it for updates; local builds don't.
 - `WebSkinPlayer.exe --test-live <folder|file> <outDir> [seconds]` opens each skin for real but hidden and sandboxed.
   Scripts, timers, GIFs, and player events all run, but nothing reaches your player, volume, browser, or settings.
   A made-up song plays (Glue by Bicep, moving on from 0:40), so skins that draw the time from its position show it.
-  Afterwards it measures how much of every visualizer area is actually visible, and for a covered one names what is
-  drawn over it (`live-report.txt`).
+  It saves every window the skin opens as `<skin>.<view>.png`, measures how much of every visualizer area is
+  actually visible, and for a covered one names what is drawn over it (`live-report.txt`).
 - `WebSkinPlayer.exe --automate script.txt` replays commands through the real input code:
   `click x y`, `drag x1 y1 x2 y2`, `eval js`, `capture file.png`, `capturefull file.png`, `vis Bars 0`,
   `choose Bars 0` (as picked from the right-click menu), `viscolor Bars palette:Fire|hue:120|custom:#RRGGBB` (no

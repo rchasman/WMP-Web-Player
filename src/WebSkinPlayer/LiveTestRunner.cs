@@ -12,8 +12,8 @@ namespace WebSkinPlayer;
 /// <summary>
 /// "--test-live &lt;folder|file&gt; &lt;outDir&gt; [seconds]": opens each skin for real but hidden and
 /// sandboxed (scripts, timers, GIF animations, player events all run; nothing reaches the real
-/// player) with a song playing, waits, then measures how much of every visualizer area is actually
-/// visible.
+/// player) with a song playing, saves every window it opens, and measures how much of every
+/// visualizer area is actually visible.
 /// </summary>
 public static class LiveTestRunner
 {
@@ -64,9 +64,11 @@ public static class LiveTestRunner
                     var result = Analyze(view, lines);
                     if (Rank(result) > Rank(status)) status = result;
                 }
-                // The largest open view is the player; the active one can be a 0x0 helper view.
-                var main = theme.OpenViews.OrderByDescending(v => (long)v.Width * v.Height).FirstOrDefault();
-                if (main != null) Save(Render(main), Path.Combine(outDir, name + ".png"));
+                foreach (var (view, i) in theme.OpenViews.ToList().Select((v, i) => (v, i)))
+                {
+                    string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
+                    Save(Render(view), Path.Combine(outDir, $"{name}.{id}.png"));
+                }
             }
             catch (Exception ex)
             {
