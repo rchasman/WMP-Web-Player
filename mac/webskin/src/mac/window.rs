@@ -249,11 +249,7 @@ impl Surface {
                     w.performWindowDragWithEvent(event);
                 }
             }
-            MouseResult::ContextMenu => {
-                if shared.show_app_menu(v, "context", (x, y)) == Some(AppAction::Quit) {
-                    shared.close();
-                }
-            }
+            MouseResult::ContextMenu if shared.show_app_menu(v, "context", (x, y)) == Some(AppAction::Quit) => shared.close(),
             _ => {}
         }
     }

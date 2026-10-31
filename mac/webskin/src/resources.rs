@@ -108,7 +108,7 @@ fn load_string(module: &str, name: &str) -> Option<String> {
                 pos += 2;
                 if i == index {
                     let end = (pos + len * 2).min(data.len());
-                    let units: Vec<u16> = data[pos..end].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                    let units: Vec<u16> = data[pos..end].as_chunks::<2>().0.iter().map(|&c| u16::from_le_bytes(c)).collect();
                     return Some(String::from_utf16_lossy(&units));
                 }
                 pos += len * 2;
