@@ -616,7 +616,7 @@ public sealed class SkinView : SubviewElement
         bool viewMask = ShapedByClipMask;
         if (UsesCompositeMask)
         {
-            EnsureCompositeMask(viewMask);
+            EnsureCompositeMask();
             if (_compositeMask != null)
             {
                 dc.PushOpacityMask(_compositeMask);
@@ -628,7 +628,7 @@ public sealed class SkinView : SubviewElement
         RenderElement(dc, this, viewMask);
     }
 
-    void EnsureCompositeMask(bool viewMask)
+    void EnsureCompositeMask()
     {
         if (!_maskDirty) return;
         // Rebuilding means a software render of the whole view; cap it at ~10 per second.
@@ -647,24 +647,11 @@ public sealed class SkinView : SubviewElement
         // A window keyed only by magenta needs no software render while nothing shown can paint it: New Super
         // Mario Bros redraws ten times a second and shows none.
         if (!KeysWindow && !HasKeyedSubview && !MayShowMagenta) { _compositeMask = null; return; }
-        int w = Math.Min(4000, Width), h = Math.Min(4000, Height);
-        var drawn = new DrawPass();
-        var px = RenderPixels(new Int32Rect(0, 0, w, h), viewMask, drawn);
-        var holes = FindHoles(drawn, px, w, h, viewMask);
-        var (clip, trans) = ViewKeys;
-        // Only key-coloured pixels are cut; everything else stays unmasked so content that
-        // changes between rebuilds (GIF frames, visualizers) is never hidden by a stale mask.
-        bool any = false;
-        for (int i = 0; i < px.Length; i++)
-        {
-            int c = px[i];
-            int a = (c >>> 24) & 255, rgb = c & 0xFFFFFF, hole = holes?[i] ?? 0;
-            bool keyed = a == 255 && ((clip is int ck && SkinImages.MatchesKey(rgb, ck)) || (trans is int tk && SkinImages.MatchesKey(rgb, tk)) ||
-                (hole != 0 && SkinImages.MatchesKey(rgb, hole & 0xFFFFFF)) || SkinImages.MatchesKey(rgb, Magenta));
-            px[i] = keyed ? 0 : unchecked((int)0xFF000000);
-            any |= keyed;
-        }
-        if (!any) { _compositeMask = null; return; }
+        var (_, cut, w, h) = RenderCut(null);
+        if (cut == null) { _compositeMask = null; return; }
+        // Only cut pixels are masked; everything else stays unmasked so content that changes between
+        // rebuilds (GIF frames, visualizers) is never hidden by a stale mask.
+        var px = cut.Select(c => c ? 0 : unchecked((int)0xFF000000)).ToArray();
         var mask = BitmapSource.Create(w, h, 96, 96, PixelFormats.Pbgra32, null, px, w * 4);
         mask.Freeze();
         var brush = new ImageBrush(mask) { ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, w, h), Stretch = Stretch.Fill };
@@ -673,11 +660,41 @@ public sealed class SkinView : SubviewElement
     }
 
     /// <summary>
-    /// A software render of <paramref name="area"/> with nothing cut, leaving out <paramref name="hidden"/>
-    /// without changing it (the test run's window checks compare the two).
+    /// The view drawn in software, and which of its pixels the window cuts (null when none), leaving out
+    /// <paramref name="hidden"/> without changing it.
     /// </summary>
-    public int[] RenderArea(Int32Rect area, SkinElement? hidden = null) =>
-        RenderPixels(area, ShapedByClipMask, new DrawPass { Hidden = hidden });
+    (int[] Pixels, bool[]? Cut, int W, int H) RenderCut(SkinElement? hidden)
+    {
+        int w = Math.Min(4000, Width), h = Math.Min(4000, Height);
+        if (w <= 0 || h <= 0) return ([], null, 0, 0);
+        bool viewMask = ShapedByClipMask;
+        var drawn = new DrawPass { Hidden = hidden };
+        var px = RenderPixels(new Int32Rect(0, 0, w, h), viewMask, drawn);
+        if (!UsesCompositeMask) return (px, null, w, h);
+        var holes = FindHoles(drawn, px, w, h, viewMask, hidden);
+        var (clip, trans) = ViewKeys;
+        var cut = new bool[px.Length];
+        bool any = false;
+        for (int i = 0; i < px.Length; i++)
+        {
+            int c = px[i];
+            int a = (c >>> 24) & 255, rgb = c & 0xFFFFFF, hole = holes?[i] ?? 0;
+            cut[i] = a == 255 && ((clip is int ck && SkinImages.MatchesKey(rgb, ck)) || (trans is int tk && SkinImages.MatchesKey(rgb, tk)) ||
+                (hole != 0 && SkinImages.MatchesKey(rgb, hole & 0xFFFFFF)) || SkinImages.MatchesKey(rgb, Magenta));
+            any |= cut[i];
+        }
+        return (px, any ? cut : null, w, h);
+    }
+
+    /// <summary>
+    /// The window as it shows, drawn in software with its cut pixels cleared, leaving out <paramref name="hidden"/>
+    /// without changing it (the test run's window checks compare the two). Width × height pixels, empty for a 0x0 view.
+    /// </summary>
+    public int[] RenderWindow(SkinElement? hidden = null)
+    {
+        var (px, cut, _, _) = RenderCut(hidden);
+        return cut == null ? px : px.Select((c, i) => cut[i] ? 0 : c).ToArray();
+    }
 
     /// <summary>A software render of the view: the elements in the order they drew, where to stop, and one to leave out.</summary>
     sealed class DrawPass
@@ -713,7 +730,7 @@ public sealed class SkinView : SubviewElement
     /// visible; its backgroundColor, EFFECTS and VIDEO fill them too (WMP showed visualizations and
     /// video in windows of their own, never keyed with the skin). Null when there is none.
     /// </summary>
-    int[]? FindHoles(DrawPass drawn, int[] final, int w, int h, bool viewMask)
+    int[]? FindHoles(DrawPass drawn, int[] final, int w, int h, bool viewMask, SkinElement? hidden)
     {
         // A hole is cut only where the window shows its key, so most views need no search at all.
         var keys = drawn.Steps.Select(s => s.El).OfType<SubviewElement>().Where(s => s != this)
@@ -748,7 +765,7 @@ public sealed class SkinView : SubviewElement
             // or an earlier hole could be replaced, so most keyed subviews need no extra render.
             bool open = looks.Any(l => l.Item2 == Backdrop.Open);
             bool matters = open && key is int openKey && looks.Any(l => holes?[l.i] is > 0 || ((final[l.i] >>> 24) == 255 && SkinImages.MatchesKey(final[l.i] & 0xFFFFFF, openKey)));
-            int[]? under = matters ? RenderPixels(area, viewMask, new DrawPass { StopAfter = opener }) : null;
+            int[]? under = matters ? RenderPixels(area, viewMask, new DrawPass { StopAfter = opener, Hidden = hidden }) : null;
             foreach (var (i, look) in looks)
             {
                 if (look == Backdrop.Open && key is int k && under != null && (under[(i / w - area.Y) * area.Width + i % w - area.X] >>> 24) == 0)

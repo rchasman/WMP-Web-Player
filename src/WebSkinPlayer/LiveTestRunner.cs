@@ -69,9 +69,8 @@ public static class LiveTestRunner
                 foreach (var (view, i) in theme.OpenViews.ToList().Select((v, i) => (v, i)))
                 {
                     string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
-                    var window = Render(view);
-                    Save(window, Path.Combine(outDir, $"{name}.{id}.png"));
-                    foreach (var fault in ControlsOutOfReach(view, window))
+                    Save(Render(view), Path.Combine(outDir, $"{name}.{id}.png"));
+                    foreach (var fault in ControlsOutOfReach(view))
                     {
                         faults++;
                         lines.Add($"    FAULT view {id}: {fault}");
@@ -104,12 +103,15 @@ public static class LiveTestRunner
     /// Controls that show in the window but take no click at any pixel they show: something transparent to
     /// the eye lies over them, or the window is see-through there. A control another part covers (a closed
     /// drawer, an intro screen) shows nowhere and is left alone, and so is what shows through a slider: a
-    /// slider takes clicks across its whole rectangle, like a Windows trackbar.
+    /// slider takes clicks across its whole rectangle, like a Windows trackbar. Both pictures are the window
+    /// as cut, so a pixel the window cuts either way is not one the control shows.
     /// </summary>
-    static List<string> ControlsOutOfReach(SkinView view, BitmapSource window)
+    static List<string> ControlsOutOfReach(SkinView view)
     {
-        var shownPx = Pixels(window, out int w, out int h);
         var faults = new List<string>();
+        int w = Math.Min(4000, view.Width), h = Math.Min(4000, view.Height);
+        if (w <= 0 || h <= 0) return faults;
+        var with = view.RenderWindow();
         foreach (var e in view.AllElements.Where(e => TakesClicks(e) && e.IsEffectivelyVisible).ToList())
         {
             var group = e is GroupButtonElement && e.Parent is ButtonGroupElement g ? g : null;
@@ -121,9 +123,7 @@ public static class LiveTestRunner
             if (area.IsEmpty) continue;
             int x0 = (int)Math.Ceiling(area.Left), y0 = (int)Math.Ceiling(area.Top), x1 = (int)Math.Floor(area.Right), y1 = (int)Math.Floor(area.Bottom);
             if (x1 <= x0 || y1 <= y0) continue;
-            var rect = new Int32Rect(x0, y0, x1 - x0, y1 - y0);
-            var with = view.RenderArea(rect);
-            var without = view.RenderArea(rect, e);
+            var without = view.RenderWindow(e);
             var takers = new Dictionary<string, int>();
             bool reached = false;
             for (int y = y0; y < y1 && !reached; y++)
@@ -131,11 +131,11 @@ public static class LiveTestRunner
                 {
                     var local = new Point(x + 0.5 - b.X, y + 0.5 - b.Y);
                     bool own = group != null ? group.ElementAt(local) == e : e.HitTest(local);
-                    int j = (y - y0) * rect.Width + (x - x0);
+                    int j = y * w + x;
                     if (!own || with[j] == without[j]) continue;
                     var taker = view.HitTestPoint(new Point(x + 0.5, y + 0.5));
                     if (taker != null && taker != e && taker is SliderElement) continue;
-                    bool opaque = (shownPx[y * w + x] >>> 24) > 0;
+                    bool opaque = (with[j] >>> 24) > 0;
                     if (taker == e && opaque) { reached = true; continue; }
                     string by = opaque && taker != null ? Label(taker) : "see-through window";
                     takers[by] = takers.GetValueOrDefault(by) + 1;
