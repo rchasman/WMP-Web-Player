@@ -187,6 +187,16 @@ public sealed class SkinImages
     /// Composes an animated GIF into full-size frames (frame offsets + disposal methods), with
     /// per-frame delays and the NETSCAPE loop count — WMP played these in skins.
     /// </summary>
+    /// <summary>
+    /// How long WMP showed a GIF frame of <paramref name="centiseconds"/>: rounded up to its 1/64 s timer tick, at
+    /// least three ticks (measured in WMP: 0-40 ms show for 47, 50 and 60 for 63, 100 for 109, 150 for 156).
+    /// </summary>
+    public static int WmpFrameMs(int centiseconds)
+    {
+        int ticks = Math.Max((centiseconds * 64 + 99) / 100, 3);
+        return (ticks * 1000 + 32) / 64;
+    }
+
     static Decoded? DecodeGif(GifBitmapDecoder gif)
     {
         int W = 0, H = 0;
@@ -208,8 +218,7 @@ public sealed class SkinImages
             var meta = f.Metadata as BitmapMetadata;
             int left = Q(meta, "/imgdesc/Left"), top = Q(meta, "/imgdesc/Top");
             int disposal = disposals[i] = Q(meta, "/grctlext/Disposal");
-            int delay = Q(meta, "/grctlext/Delay") * 10;
-            if (delay < 20) delay = 100; // browsers' convention for 0/too-fast delays
+            int delay = WmpFrameMs(Q(meta, "/grctlext/Delay"));
 
             int[]? previous = disposal == 3 ? (int[])canvas.Clone() : null;
             var conv = new FormatConvertedBitmap(f, PixelFormats.Bgra32, null, 0);
