@@ -161,9 +161,10 @@ public sealed class SkinTheme
         return prefs.TryGetValue(PrefKey, out var d) && d.TryGetValue(name, out var v) ? v : "--";
     }
 
+    /// <summary>Kept in the settings, which a test run never writes to disk: skins read their own back (Disney's intro).</summary>
     public void SavePreference(string name, string value)
     {
-        if (_preview || Sandbox.Enabled) return;
+        if (_preview) return;
         var prefs = App.Services.Settings.SkinPreferences;
         if (!prefs.TryGetValue(PrefKey, out var d)) prefs[PrefKey] = d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         d[name] = value;
