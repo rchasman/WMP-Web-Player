@@ -191,7 +191,7 @@ public sealed class SkinImages
     /// How long WMP showed a GIF frame of <paramref name="centiseconds"/>: rounded up to its 1/64 s timer tick, at
     /// least three ticks (measured in WMP: 0-40 ms show for 47, 50 and 60 for 63, 100 for 109, 150 for 156).
     /// </summary>
-    public static int WmpFrameMs(int centiseconds)
+    static int WmpFrameMs(int centiseconds)
     {
         int ticks = Math.Max((centiseconds * 64 + 99) / 100, 3);
         return (ticks * 1000 + 32) / 64;
