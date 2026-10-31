@@ -292,6 +292,13 @@ fn decode_image(bytes: &[u8]) -> Option<Decoded> {
 
 /// Composes an animated GIF into full-size frames (offsets and disposal), with per-frame delays and
 /// the NETSCAPE loop count; WMP played these in skins. None for single-frame GIFs.
+/// How long WMP showed a GIF frame, measured on Windows: its delay rounded up to the 1/64 s
+/// system timer tick, and never under three ticks, so 0 to 40 ms frames all last 47 ms.
+fn wmp_frame_ms(centiseconds: u16) -> u32 {
+    let ticks = (u32::from(centiseconds) * 10 * 64).div_ceil(1000).max(3);
+    (ticks * 1000 + 32) / 64
+}
+
 fn decode_gif(bytes: &[u8]) -> Option<Decoded> {
     let mut opts = gif::DecodeOptions::new();
     opts.set_color_output(gif::ColorOutput::RGBA);
@@ -320,10 +327,7 @@ fn decode_gif(bytes: &[u8]) -> Option<Decoded> {
     let count = raw.len();
     for (i, f) in raw.iter().enumerate() {
         let (left, top, fw, fh) = (u32::from(f.left), u32::from(f.top), u32::from(f.width), u32::from(f.height));
-        let mut delay = u32::from(f.delay) * 10;
-        if delay < 20 {
-            delay = 100; // browsers' convention for 0/too-fast delays
-        }
+        let delay = wmp_frame_ms(f.delay);
         let previous = (f.dispose == gif::DisposalMethod::Previous).then(|| canvas.clone());
         for y in 0..fh {
             let cy = top + y;
@@ -625,6 +629,20 @@ mod tests {
         image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut data), image::ImageFormat::Bmp).unwrap();
         let d = decode_image(&data).unwrap();
         assert_eq!(*d.frames[0], vec![0xFFFF00FF, 0xFF010203]);
+    }
+
+    #[test]
+    fn frames_last_as_long_as_wmp_showed_them() {
+        let mut data = Vec::new();
+        let mut gif = gif::Encoder::new(&mut data, 1, 1, &[0, 0, 0, 90, 90, 90]).unwrap();
+        gif.set_repeat(gif::Repeat::Infinite).unwrap();
+        for (i, centiseconds) in [0, 5, 10, 15].into_iter().enumerate() {
+            let mut frame = gif::Frame::from_indexed_pixels(1, 1, vec![(i % 2) as u8], None);
+            frame.delay = centiseconds;
+            gif.write_frame(&frame).unwrap();
+        }
+        drop(gif);
+        assert_eq!(decode_image(&data).unwrap().delays, vec![47, 63, 109, 156]);
     }
 
     fn played_once(disposals: [gif::DisposalMethod; 2]) -> Decoded {
