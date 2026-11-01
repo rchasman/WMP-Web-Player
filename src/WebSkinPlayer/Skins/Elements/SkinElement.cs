@@ -232,6 +232,23 @@ public class SkinElement : ScriptObject
         return null;
     }
 
+    /// <summary>
+    /// Whether clicks pass through to what lies beneath: it has passThrough, or the nearest subview or view
+    /// holding it does. Measured in WMP with synthetic clicks: a subview's passThrough reaches its buttons,
+    /// text and visualizers (even one set passThrough="false") but not the subviews inside it, which start
+    /// afresh. QuickSilver switches its sliders off this way; Plus! Bionic Dot's EQ lies under such a visualizer.
+    /// </summary>
+    public bool PassesClicks => GetBool("passthrough") || (this is not SubviewElement && Container?.GetBool("passthrough") == true);
+
+    SkinElement? Container
+    {
+        get
+        {
+            for (var p = Parent; p != null; p = p.Parent) if (p is SubviewElement) return p;
+            return null;
+        }
+    }
+
     static readonly string[] MouseHandlers = { "onclick", "onmousedown", "onmouseup", "ondblclick", "onmouseover", "onmouseout", "onmousemove" };
 
     /// <summary>

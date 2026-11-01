@@ -854,7 +854,7 @@ public sealed class SkinView : SubviewElement
             var local = new Point(p.X - abs.X, p.Y - abs.Y);
             if (c is ButtonGroupElement g)
             {
-                if (g.HitTest(local) && g.MaskAllows(local)) return g.ElementAt(local);
+                if (!g.PassesClicks && g.HitTest(local) && g.MaskAllows(local)) return g.ElementAt(local);
                 continue;
             }
             if (c.ClipsChildren && (local.X < 0 || local.Y < 0 || local.X >= c.Width || local.Y >= c.Height || !c.MaskAllows(local))) continue;
@@ -862,7 +862,7 @@ public sealed class SkinView : SubviewElement
             var hit = HitIn(above, p);
             if (hit != null) return hit;
             // A disabled button lets clicks through: QuickSilver lays disabled buttons over its real ones as artwork.
-            bool own = !c.GetBool("passthrough") && c is not ButtonElement { Enabled: false } && c.MaskAllows(local);
+            bool own = !c.PassesClicks && c is not ButtonElement { Enabled: false } && c.MaskAllows(local);
             if (own && c.HitTestImage(local)) return c;
             hit = HitIn(behind, p);
             if (hit != null) return hit;

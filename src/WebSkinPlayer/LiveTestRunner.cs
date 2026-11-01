@@ -154,10 +154,13 @@ public static class LiveTestRunner
 
     static readonly string[] ClickHandlers = { "onclick", "onmousedown", "onmouseup", "ondblclick" };
 
-    /// <summary>A control meant to be clicked now: enabled, not a passThrough mirror of another, and a button only when clicking it does something.</summary>
+    /// <summary>
+    /// A control meant to be clicked now: enabled, not passing clicks through (Scooby-Doo's second seek bar
+    /// mirrors the first), nor in a button group that does, and a button only when clicking it does something.
+    /// </summary>
     static bool TakesClicks(SkinElement e) =>
         e is ButtonElement or GroupButtonElement or SliderElement or CustomSliderElement
-        && !e.GetBool("passthrough") && e.Enabled
+        && !e.PassesClicks && e.Parent is not ButtonGroupElement { PassesClicks: true } && e.Enabled
         && (e is SliderElement or CustomSliderElement || ButtonPresets.For(e.Tag) != null || ClickHandlers.Any(e.HasHandler));
 
     static string Label(SkinElement e) => e.Id != null ? $"<{e.Tag} id={e.Id}>" : $"<{e.Tag}> at {e.AbsoluteBounds.X:0},{e.AbsoluteBounds.Y:0}";
