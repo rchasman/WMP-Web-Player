@@ -9,7 +9,7 @@ use crate::render::Canvas;
 use crate::settings::Settings;
 use crate::skin::audit;
 use crate::skin::{NullHost, Shared, Skin, ViewId};
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -23,6 +23,8 @@ pub struct Summary {
     pub failed: usize,
     /// Faults found in the saved windows.
     pub faults: usize,
+    /// Skins whose scripts failed when the song paused, changed, moved or stopped.
+    pub with_event_errors: usize,
 }
 
 fn skin_files(source: &Path) -> Vec<PathBuf> {
@@ -40,9 +42,9 @@ fn skin_files(source: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// A skin's script errors, the size of its preview picture, the faults in its windows and how
-/// they compare with its preview screenshot.
-type Outcome = Result<(Vec<String>, Option<(u32, u32)>, Vec<String>, Option<String>), String>;
+/// A skin's script errors, the size of its preview picture, the faults in its windows, how they
+/// compare with its preview screenshot, and the script errors the song events raised.
+type Outcome = Result<(Vec<String>, Option<(u32, u32)>, Vec<String>, Option<String>, Vec<String>), String>;
 
 /// Loads a skin's main view offscreen as WMP's Skin Chooser did, without a player object.
 fn load_for_chooser(path: &Path) -> Result<(Rc<Shared>, ViewId), String> {
@@ -54,37 +56,109 @@ fn load_for_chooser(path: &Path) -> Result<(Rc<Shared>, ViewId), String> {
 /// A window a skin opens when applied, drawn, with the faults found in it.
 struct Window {
     id: String,
+    /// The song event it was drawn after; none for the window as first shown.
+    after: Option<SongEvent>,
     canvas: Canvas,
     tree: String,
     faults: Vec<String>,
 }
 
-/// A song playing, as skins are used and as their authors took their preview screenshots.
-/// It moves on by `elapsed` seconds, so skins that follow currentPosition_onchange see it play.
+/// A song playing, as skins are used and as their authors took their preview screenshots. The
+/// runner moves it on, so skins that follow currentPosition_onchange see it play, and then pauses
+/// it, skips, seeks and quits the app (`SongEvent`).
 #[derive(Default)]
 pub(crate) struct Playing {
-    elapsed: Rc<Cell<f64>>,
+    song: Rc<RefCell<Song>>,
+}
+
+struct Song {
+    snapshot: MediaSnapshot,
+    position: f64,
+}
+
+impl Default for Song {
+    fn default() -> Self {
+        Song {
+            snapshot: MediaSnapshot {
+                title: "Glue".into(),
+                artist: "Bicep".into(),
+                album: "Bicep".into(),
+                source_app: "Spotify".into(),
+                status: MediaStatus::Playing,
+                duration: 269.0,
+                can_next: true,
+                can_previous: true,
+                can_seek: true,
+                can_shuffle: true,
+                can_repeat: true,
+                ..Default::default()
+            },
+            position: 40.0,
+        }
+    }
+}
+
+/// What the followed app does after the first eight seconds, in this order.
+#[derive(Clone, Copy, PartialEq)]
+enum SongEvent {
+    Pause,
+    Resume,
+    NextTrack,
+    Seek,
+    /// The app quits: no session is left, the nearest a Mac has to WMP's stop.
+    Quit,
+}
+
+impl SongEvent {
+    const ALL: [SongEvent; 5] = [SongEvent::Pause, SongEvent::Resume, SongEvent::NextTrack, SongEvent::Seek, SongEvent::Quit];
+
+    fn name(self) -> &'static str {
+        match self {
+            SongEvent::Pause => "paused",
+            SongEvent::Resume => "resumed",
+            SongEvent::NextTrack => "next",
+            SongEvent::Seek => "seeked",
+            SongEvent::Quit => "quit",
+        }
+    }
+
+    /// Tenths of a second to run after it: long enough for the player's holds (1.5 s for a pause,
+    /// 15 s for a session that ends) to let the skin see it.
+    fn steps(self) -> u64 {
+        match self {
+            SongEvent::Pause => 25,
+            SongEvent::Resume | SongEvent::Seek => 10,
+            SongEvent::NextTrack => 20,
+            SongEvent::Quit => 160,
+        }
+    }
+
+    /// Whether the windows are saved and checked after it.
+    fn checked(self) -> bool {
+        matches!(self, SongEvent::Pause | SongEvent::NextTrack | SongEvent::Quit)
+    }
+
+    fn apply(self, song: &mut Song) {
+        let m = &mut song.snapshot;
+        match self {
+            SongEvent::Pause => m.status = MediaStatus::Paused,
+            SongEvent::Resume => m.status = MediaStatus::Playing,
+            SongEvent::NextTrack => {
+                (m.title, m.artist, m.album, m.duration) = ("Opal".into(), "Four Tet".into(), "New Energy".into(), 180.0);
+                song.position = 0.0;
+            }
+            SongEvent::Seek => song.position = 150.0,
+            SongEvent::Quit => *song = Song { snapshot: MediaSnapshot::default(), position: 0.0 },
+        }
+    }
 }
 
 impl MediaSource for Playing {
     fn snapshot(&self) -> MediaSnapshot {
-        MediaSnapshot {
-            title: "Glue".into(),
-            artist: "Bicep".into(),
-            album: "Bicep".into(),
-            source_app: "Spotify".into(),
-            status: MediaStatus::Playing,
-            duration: 269.0,
-            can_next: true,
-            can_previous: true,
-            can_seek: true,
-            can_shuffle: true,
-            can_repeat: true,
-            ..Default::default()
-        }
+        self.song.borrow().snapshot.clone()
     }
     fn position(&self) -> f64 {
-        40.0 + self.elapsed.get()
+        self.song.borrow().position
     }
     fn artwork(&self) -> Option<Rc<Artwork>> {
         None
@@ -103,37 +177,75 @@ impl MediaSource for Playing {
     fn set_mute(&self, _: bool) {}
 }
 
+/// What a skin did when applied: the script errors raised before the song events, its windows,
+/// and the script errors each event raised.
+struct Applied {
+    errors: Vec<String>,
+    windows: Vec<Window>,
+    event_errors: Vec<String>,
+}
+
 /// Draws every window a skin opens when applied, with a song playing (the Skin Chooser picture is
-/// often just an image).
-/// Returns them with the script errors raised on the way.
-fn applied_windows(path: &Path) -> Result<(Vec<String>, Vec<Window>), String> {
+/// often just an image), and again after the song events that are checked.
+fn applied_windows(path: &Path) -> Result<Applied, String> {
     let playing = Playing::default();
-    let elapsed = playing.elapsed.clone();
+    let song = playing.song.clone();
     let shared = Shared::load(path, Box::new(playing), Settings::scratch(), Rc::new(NullHost), false).map_err(|e| e.0)?;
     shared.open_main_view();
-    // Eight seconds of timers: some skins open their main window from one (World of Warcraft),
-    // and intros play out. Each step draws, as the app does: a GIF's clock starts when it is
-    // first drawn (Catwoman's shutter opens with one).
+    // Each step moves the song on and draws, as the app does: a GIF's clock starts when it is first
+    // drawn (Catwoman's shutter opens with one).
     let start = Instant::now();
-    for step in 1..=80 {
-        elapsed.set(step as f64 / 10.0);
-        shared.tick(start + Duration::from_millis(step * 100));
-        shared.read(|s| s.open_views().for_each(|v| drop(s.render_view(v, 1.0))));
+    let (mut step, mut played_from, mut position_then) = (0, 0, 40.0);
+    let mut run = |steps: u64, played_from: u64, position_then: f64| {
+        for _ in 0..steps {
+            step += 1;
+            {
+                let mut s = song.borrow_mut();
+                if s.snapshot.status == MediaStatus::Playing {
+                    s.position = position_then + (step - played_from) as f64 / 10.0;
+                }
+            }
+            shared.tick(start + Duration::from_millis(step * 100));
+            shared.read(|s| s.open_views().for_each(|v| drop(s.render_view(v, 1.0))));
+        }
+        step
+    };
+    // Eight seconds of timers: some skins open their main window from one (World of Warcraft),
+    // and intros play out.
+    let mut now = run(80, played_from, position_then);
+    let mut windows = drawn_windows(&shared, None);
+    let errors = shared.errors.borrow().clone();
+    let mut event_errors = vec![];
+    for event in SongEvent::ALL {
+        let raised = shared.errors.borrow().len();
+        {
+            let mut s = song.borrow_mut();
+            event.apply(&mut s);
+            (played_from, position_then) = (now, s.position);
+        }
+        now = run(event.steps(), played_from, position_then);
+        event_errors.extend(shared.errors.borrow()[raised..].iter().map(|e| format!("after {}: {e}", event.name())));
+        if event.checked() {
+            windows.extend(drawn_windows(&shared, Some(event)));
+        }
     }
+    Ok(Applied { errors, windows, event_errors })
+}
+
+/// Every open window, drawn and checked.
+fn drawn_windows(shared: &Rc<Shared>, after: Option<SongEvent>) -> Vec<Window> {
     let views: Vec<ViewId> = shared.read(|s| s.open_views().collect());
-    let windows = views
+    views
         .into_iter()
         .filter_map(|v| {
             let (id, canvas, tree) = shared.read(|s| {
                 let id = s.view(v).id.clone().filter(|id| !id.is_empty()).unwrap_or_else(|| format!("view{v}"));
                 Some((id, s.render_view(v, 1.0)?, dump_tree(s, v)))
             })?;
-            let faults = [audit::key_colour_left(&shared, v, &canvas), audit::controls_out_of_reach(&shared, v, &canvas)].concat();
-            Some(Window { id, canvas, tree, faults })
+            let faults = [audit::key_colour_left(shared, v, &canvas), audit::controls_out_of_reach(shared, v, &canvas)].concat();
+            Some(Window { id, after, canvas, tree, faults })
         })
-        .collect();
-    let errors = shared.errors.borrow().clone();
-    Ok((errors, windows))
+        .collect()
 }
 
 pub fn run(source: &Path, out: &Path) -> std::io::Result<Summary> {
@@ -149,13 +261,18 @@ pub fn run(source: &Path, out: &Path) -> std::io::Result<Summary> {
             let screenshot = preview.read(|s| PREVIEWS.iter().find_map(|p| s.images.get_raw(p)));
             let mut faults = vec![];
             let mut best: Option<(audit::PreviewMatch, String)> = None;
-            let (errors, windows) = applied_windows(&file)?;
+            let Applied { errors, windows, event_errors } = applied_windows(&file)?;
             for w in windows {
                 let picture = trim(&w.canvas);
-                save_png(&picture, &out.join(format!("{name}.{}.png", w.id)));
-                std::fs::write(out.join(format!("{name}.{}.tree.txt", w.id)), &w.tree).map_err(|e| e.to_string())?;
-                faults.extend(w.faults.into_iter().map(|f| format!("{}: {f}", w.id)));
-                if let Some(m) = screenshot.as_ref().and_then(|p| audit::compare_preview(p, &picture))
+                let label = match w.after {
+                    Some(e) => format!("{}.{}", w.id, e.name()),
+                    None => w.id.clone(),
+                };
+                save_png(&picture, &out.join(format!("{name}.{label}.png")));
+                std::fs::write(out.join(format!("{name}.{label}.tree.txt")), &w.tree).map_err(|e| e.to_string())?;
+                faults.extend(w.faults.into_iter().map(|f| format!("{label}: {f}")));
+                if w.after.is_none()
+                    && let Some(m) = screenshot.as_ref().and_then(|p| audit::compare_preview(p, &picture))
                     && best.as_ref().is_none_or(|(b, _)| m.score > b.score)
                 {
                     best = Some((m, w.id));
@@ -166,10 +283,10 @@ pub fn run(source: &Path, out: &Path) -> std::io::Result<Summary> {
                 let side = |n: Option<usize>| n.map_or_else(|| "-".to_string(), |n| n.to_string());
                 format!("{:.1}% like its preview ({id}), {} extra, {} missing", m.score * 100.0, side(m.extra), side(m.missing))
             });
-            Ok((errors, size.flatten(), faults, compared))
+            Ok((errors, size.flatten(), faults, compared, event_errors))
         }));
         match result {
-            Ok(Ok((errors, size, faults, compared))) => {
+            Ok(Ok((errors, size, faults, compared, event_errors))) => {
                 if errors.is_empty() {
                     summary.ok += 1;
                     let (w, h) = size.unwrap_or_default();
@@ -188,6 +305,12 @@ pub fn run(source: &Path, out: &Path) -> std::io::Result<Summary> {
                 if let Some(c) = compared {
                     let _ = writeln!(report, "PREVIEW   {c}");
                 }
+                if !event_errors.is_empty() {
+                    summary.with_event_errors += 1;
+                    for e in event_errors.iter().take(8) {
+                        let _ = writeln!(report, "EVENT     {e}");
+                    }
+                }
             }
             Ok(Err(e)) => {
                 summary.failed += 1;
@@ -202,8 +325,8 @@ pub fn run(source: &Path, out: &Path) -> std::io::Result<Summary> {
     }
     let _ = writeln!(
         report,
-        "\n{} OK, {} with script errors, {} failed, {} faults in windows",
-        summary.ok, summary.with_errors, summary.failed, summary.faults
+        "\n{} OK, {} with script errors, {} failed, {} faults in windows, {} with script errors after song events",
+        summary.ok, summary.with_errors, summary.failed, summary.faults, summary.with_event_errors
     );
     std::fs::write(out.join("report.txt"), &report)?;
     print!("{report}");
