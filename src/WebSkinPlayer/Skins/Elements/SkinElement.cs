@@ -430,6 +430,12 @@ public class SkinElement : ScriptObject
         foreach (var c in Children) c.RestartAnimations();
     }
 
+    /// <summary>WMP font sizes are points at 96 dpi, which Windows rounded to whole pixels.</summary>
+    protected static double PointsToPixels(double points) => Math.Round(Math.Max(1, points) * 96.0 / 72.0);
+
+    /// <summary>A line's height for a font of <paramref name="px"/> pixels, as Windows rounded Tahoma's ascent plus descent.</summary>
+    protected static double LineHeight(double px) => Math.Round(px * 1.21);
+
     protected static void DrawBitmap(DrawingContext dc, SkinBitmap? bmp, double x, double y)
     {
         if (bmp == null) return;

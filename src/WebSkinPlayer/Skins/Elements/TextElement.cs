@@ -35,7 +35,8 @@ public sealed class TextElement : SkinElement
         "foregroundcolor" => "#FFFFFF",
         "backgroundcolor" => "none",
         "fontface" => "Tahoma",
-        "fontsize" => 8.0,
+        // WMP's docs give TEXT.fontSize a default of 10 points.
+        "fontsize" => 10.0,
         "fontstyle" => "normal",
         "fontsmoothing" => true,
         "justification" => "left",
@@ -58,9 +59,9 @@ public sealed class TextElement : SkinElement
         var face = new FontFamily(GetString("fontface").Length > 0 ? GetString("fontface") + ", Tahoma, Segoe UI" : "Tahoma");
         var typeface = new Typeface(face, style.Contains("italic") ? FontStyles.Italic : FontStyles.Normal,
             style.Contains("bold") ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal);
-        double px = Math.Max(1, GetNumber("fontsize")) * 96.0 / 72.0;
+        double px = PointsToPixels(GetNumber("fontsize"));
         var ft = new FormattedText(Text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, px,
-            new SolidColorBrush(Color()), VisualTreeHelper.GetDpi(View.Surface).PixelsPerDip);
+            new SolidColorBrush(Color()), VisualTreeHelper.GetDpi(View.Surface).PixelsPerDip) { LineHeight = LineHeight(px) };
         if (style.Contains("underline")) ft.SetTextDecorations(TextDecorations.Underline);
         if (wrapWidth > 0) ft.MaxTextWidth = wrapWidth;
         _cache = ft;
@@ -77,7 +78,8 @@ public sealed class TextElement : SkinElement
     }
 
     public override int NaturalWidth => (int)Math.Ceiling(Measure().WidthIncludingTrailingWhitespace) + 1;
-    public override int NaturalHeight => (int)Math.Ceiling(Measure().Height);
+    // Whole lines, one even for no text.
+    public override int NaturalHeight => (int)Math.Max(Math.Ceiling(Measure().Height), LineHeight(PointsToPixels(GetNumber("fontsize"))));
 
     public bool Overflows => !GetBool("wordwrap") && Measure().WidthIncludingTrailingWhitespace > Width + 0.5;
     public bool IsScrolling => GetBool("scrolling") && Overflows && IsEffectivelyVisible;

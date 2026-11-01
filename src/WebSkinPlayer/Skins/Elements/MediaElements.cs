@@ -325,7 +325,7 @@ public sealed class PlaylistElement : SkinElement
         if (bg != null) dc.DrawImage(bg.Source, new Rect(b.X, b.Y, bg.Width, bg.Height));
 
         var items = View.Theme.Objects.History;
-        double px = Math.Max(6, GetNumber("fontsize")) * 96 / 72;
+        double px = PointsToPixels(Math.Max(6, GetNumber("fontsize")));
         double rowH = Math.Ceiling(px * 1.45);
         var face = new Typeface(GetString("fontface") + ", Tahoma");
         double dip = VisualTreeHelper.GetDpi(View.Surface).PixelsPerDip;
