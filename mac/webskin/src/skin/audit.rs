@@ -234,13 +234,13 @@ pub fn controls_out_of_reach(shared: &Shared, v: ViewId, c: &Canvas) -> Vec<Stri
     found
 }
 
-/// A control meant to be clicked now: enabled, not a passThrough mirror of another (Scooby-Doo's
-/// second seek bar), and a button only when clicking it does something.
+/// A control meant to be clicked now: enabled, not passing clicks through (Scooby-Doo's second
+/// seek bar mirrors the first), and a button only when clicking it does something.
 fn takes_clicks(s: &Skin, v: ViewId, e: usize) -> bool {
     let kind = s.el(v, e).kind;
     let acts = || preset(&s.el(v, e).tag).is_some() || ["onclick", "onmousedown", "onmouseup", "ondblclick"].iter().any(|h| s.has_handler(v, e, h));
     matches!(kind, Kind::Button | Kind::GroupButton | Kind::Slider | Kind::CustomSlider)
-        && !s.get_bool(v, e, "passthrough")
+        && !s.passes_clicks(v, e)
         && s.enabled(v, e)
         && (matches!(kind, Kind::Slider | Kind::CustomSlider) || acts())
 }

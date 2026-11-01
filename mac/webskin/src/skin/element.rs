@@ -868,6 +868,17 @@ impl Skin {
         }
     }
 
+    /// Whether clicks pass through `e` to what lies beneath: it has passThrough, or the subview
+    /// holding it does. Measured in WMP: a subview's passThrough reaches its buttons, text and
+    /// visualizers (even one set passThrough="false") but not the subviews inside it.
+    pub fn passes_clicks(&self, v: ViewId, e: usize) -> bool {
+        self.get_bool(v, e, "passthrough")
+            || (!matches!(self.el(v, e).kind, Kind::View | Kind::Subview)
+                && std::iter::successors(self.el(v, e).parent, |&p| self.el(v, p).parent)
+                    .find(|&p| matches!(self.el(v, p).kind, Kind::View | Kind::Subview))
+                    .is_some_and(|p| self.get_bool(v, p, "passthrough")))
+    }
+
     /// Whether an element that draws nothing to click does something with the mouse anyway.
     fn uses_mouse(&self, v: ViewId, e: usize) -> bool {
         self.tooltip(v, e).is_some()

@@ -824,7 +824,7 @@ impl Skin {
             let (ax, ay) = self.absolute(v, c);
             let (lx, ly) = (x - ax, y - ay);
             if self.el(v, c).kind == Kind::ButtonGroup {
-                if self.hit_test(v, c, lx, ly) && self.mask_allows(v, c, lx, ly) {
+                if !self.passes_clicks(v, c) && self.hit_test(v, c, lx, ly) && self.mask_allows(v, c, lx, ly) {
                     return self.group_element_at(v, c, lx, ly);
                 }
                 continue;
@@ -845,7 +845,7 @@ impl Skin {
             // A disabled button lets clicks through: QuickSilver covers its buttons with disabled
             // ones as artwork.
             let disabled_button = self.el(v, c).kind == Kind::Button && !self.enabled(v, c);
-            let own = !self.get_bool(v, c, "passthrough") && !disabled_button && self.hit_test(v, c, lx, ly) && self.mask_allows(v, c, lx, ly);
+            let own = !self.passes_clicks(v, c) && !disabled_button && self.hit_test(v, c, lx, ly) && self.mask_allows(v, c, lx, ly);
             // Its image covers the children behind it; its colour lies under them.
             if own && (behind.is_empty() || self.background_covers(v, c, lx, ly)) {
                 return Some(c);

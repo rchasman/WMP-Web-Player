@@ -1261,6 +1261,40 @@ mod tests {
         assert_eq!(handle.0, handle.1, "an empty subview with a mouse handler still takes clicks");
     }
 
+    /// Measured in WMP: passThrough on a subview reaches the elements in it but not the subviews
+    /// in it. Plus! Bionic Dot's EQ is clickable under its passThrough visualizer mask.
+    #[test]
+    fn a_passthrough_subview_lets_clicks_through_its_own_elements() {
+        let dir = temp_dir("passthrough-subview");
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="100" height="20">
+                 <BUTTON id="under1" width="20" height="20" onClick="x = 1;"/>
+                 <SUBVIEW id="mask" zIndex="5" width="20" height="20" passThrough="true">
+                   <EFFECTS id="vis" width="20" height="20" windowed="false"/>
+                 </SUBVIEW>
+                 <SUBVIEW id="tray" zIndex="5" left="40" width="20" height="20" passThrough="true">
+                   <BUTTON id="inside" width="20" height="20" passThrough="false" onClick="x = 2;"/>
+                 </SUBVIEW>
+                 <BUTTON id="under3" left="70" width="20" height="20" onClick="x = 3;"/>
+                 <SUBVIEW id="outer" zIndex="5" left="70" width="20" height="20" passThrough="true">
+                   <SUBVIEW id="inner" width="20" height="20">
+                     <EFFECTS id="nested" width="20" height="20" windowed="false"/>
+                   </SUBVIEW>
+                 </SUBVIEW>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        shared.read(|s| {
+            let id = |name: &str| Some(s.view(v).by_id[name]);
+            assert_eq!(s.hit_test_point(v, 10.0, 10.0), id("under1"), "the visualizer in the mask lets the click through");
+            assert_ne!(s.hit_test_point(v, 50.0, 10.0), id("inside"), "a button in a passThrough subview takes no click");
+            assert_eq!(s.hit_test_point(v, 80.0, 10.0), id("nested"), "a subview inside starts afresh");
+        });
+    }
+
     /// QuickSilver lays disabled buttons over its real ones as artwork.
     #[test]
     fn a_disabled_button_lets_clicks_reach_the_button_under_it() {
