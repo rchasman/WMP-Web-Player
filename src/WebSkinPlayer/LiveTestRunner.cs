@@ -13,13 +13,58 @@ namespace WebSkinPlayer;
 /// "--test-live &lt;folder|file&gt; &lt;outDir&gt; [seconds]": opens each skin for real but hidden and
 /// sandboxed (scripts, timers, GIF animations, player events all run; nothing reaches the real
 /// player) with a song playing, saves every window it opens, measures how much of every visualizer
-/// area is actually visible, and checks that every control it shows can be clicked. Returns the
-/// number of controls out of reach.
+/// area is actually visible, and checks that every control it shows can be clicked. Then the song
+/// pauses, resumes, changes, jumps and stops, and the windows are saved and checked again after the
+/// pause, the change and the stop, with the script errors each event raised. Returns the number of
+/// controls out of reach.
 /// </summary>
 public static class LiveTestRunner
 {
-    /// <summary>Seconds the song has played in the skin being tested.</summary>
-    static double _elapsed;
+    /// <summary>The song the followed app plays, as skins are used and as their authors took their preview screenshots.</summary>
+    static readonly MediaSnapshot Glue = new()
+    {
+        Title = "Glue", Artist = "Bicep", Album = "Bicep", SourceApp = "Spotify", SourceDisplayName = "Spotify",
+        Status = MediaStatus.Playing, Duration = TimeSpan.FromSeconds(269),
+        CanPlay = true, CanPause = true, CanStop = true, CanNext = true, CanPrevious = true, CanSeek = true,
+        CanFastForward = true, CanRewind = true, CanShuffle = true, CanRepeat = true,
+    };
+
+    static MediaSnapshot _song = Glue;
+    /// <summary>Where the song is, in seconds.</summary>
+    static double _position;
+
+    /// <summary>What the followed app does after the first pass, in this order.</summary>
+    enum SongEvent { Paused, Resumed, Next, Seeked, Stopped }
+
+    /// <summary>
+    /// Tenths of a second to run after an event, long enough for the player's holds (1.5 s for a pause,
+    /// 15 s for a stop it did not ask for) to let the skin see it, and whether the windows are saved and
+    /// checked after it.
+    /// </summary>
+    static (int Steps, bool Checked) Plan(SongEvent e) => e switch
+    {
+        SongEvent.Paused => (25, true),
+        SongEvent.Resumed or SongEvent.Seeked => (10, false),
+        SongEvent.Next => (20, true),
+        _ => (160, true),
+    };
+
+    static void Apply(SongEvent e)
+    {
+        switch (e)
+        {
+            case SongEvent.Paused: _song = _song with { Status = MediaStatus.Paused }; break;
+            case SongEvent.Resumed: _song = _song with { Status = MediaStatus.Playing }; break;
+            case SongEvent.Next:
+                _song = _song with { Title = "Opal", Artist = "Four Tet", Album = "New Energy", Duration = TimeSpan.FromSeconds(180) };
+                _position = 0;
+                break;
+            case SongEvent.Seeked: _position = 150; break;
+            // WMP's stop: the followed app stops and the player shows Stopped.
+            default: _song = _song with { Status = MediaStatus.Stopped }; _position = 0; break;
+        }
+        App.Services.Media.Simulate(_song, () => TimeSpan.FromSeconds(_position));
+    }
 
     public static async Task<int> RunAsync(string source, string outDir, double seconds)
     {
@@ -28,58 +73,78 @@ public static class LiveTestRunner
         var files = Directory.Exists(source)
             ? Directory.EnumerateFiles(source, "*.wmz").OrderBy(f => f).ToList()
             : new List<string> { source };
-        // A song playing, as skins are used and as their authors took their preview screenshots: skins
-        // that draw their time from currentPosition_onchange need it moving.
-        App.Services.Media.Simulate(new MediaSnapshot
-        {
-            Title = "Glue", Artist = "Bicep", Album = "Bicep", SourceApp = "Spotify", SourceDisplayName = "Spotify",
-            Status = MediaStatus.Playing, Duration = TimeSpan.FromSeconds(269),
-            CanPlay = true, CanPause = true, CanStop = true, CanNext = true, CanPrevious = true, CanSeek = true,
-            CanFastForward = true, CanRewind = true, CanShuffle = true, CanRepeat = true,
-        }, () => TimeSpan.FromSeconds(40 + _elapsed));
         var report = new StringBuilder();
         var counts = new Dictionary<string, int>();
-        int faults = 0;
+        int faults = 0, withEventErrors = 0;
+        string? phase = null;
+        var eventErrors = new List<string>();
+        void OnLog(string line)
+        {
+            if (phase != null && line.Contains("] script error in ", StringComparison.Ordinal)) eventErrors.Add($"after {phase}: {line[(line.IndexOf(' ') + 1)..]}");
+        }
+        Log.Written += OnLog;
         foreach (var file in files)
         {
             string name = Path.GetFileNameWithoutExtension(file);
             SkinTheme? theme = null;
             var lines = new List<string>();
             string status = "NO-VIS";
+            phase = null;
+            eventErrors.Clear();
             try
             {
-                _elapsed = 0;
-                theme = SkinTheme.Load(file);
-                theme.OpenMainView();
+                (_song, _position) = (Glue, 40);
+                App.Services.Media.Simulate(_song, () => TimeSpan.FromSeconds(_position));
+                var applied = theme = SkinTheme.Load(file);
+                applied.OpenMainView();
                 // Hidden windows never paint, so draw every 100 ms like the real window would (this is what
-                // starts and advances GIF animations), with the song moving on.
-                for (int step = 1; step <= Math.Round(seconds * 10); step++)
+                // starts and advances GIF animations), with the song moving on while it plays.
+                async Task Run(int steps)
                 {
-                    _elapsed = step / 10.0;
-                    await Task.Delay(100);
-                    foreach (var v in theme.OpenViews.ToList()) Render(v);
+                    for (int i = 0; i < steps; i++)
+                    {
+                        if (_song.Status == MediaStatus.Playing) _position += 0.1;
+                        await Task.Delay(100);
+                        foreach (var v in applied.OpenViews.ToList()) Render(v);
+                    }
                 }
-                // Past the mask rebuild limit, so the windows below are cut as they are now.
+                void SaveAndCheck(string? after)
+                {
+                    foreach (var (view, i) in applied.OpenViews.ToList().Select((v, i) => (v, i)))
+                    {
+                        string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
+                        string label = after == null ? id : $"{id}.{after}";
+                        Save(Render(view), Path.Combine(outDir, $"{name}.{label}.png"));
+                        view.HeldAt = DateTime.UtcNow;
+                        try
+                        {
+                            foreach (var fault in ControlsOutOfReach(view))
+                            {
+                                faults++;
+                                lines.Add($"    FAULT view {label}: {fault}");
+                            }
+                        }
+                        finally { view.HeldAt = null; }
+                    }
+                }
+                await Run((int)Math.Round(seconds * 10));
+                // Past the mask rebuild limit, so the windows are cut as they are now.
                 await Task.Delay(150);
-                foreach (var view in theme.OpenViews.ToList())
+                foreach (var view in applied.OpenViews.ToList())
                 {
                     var result = Analyze(view, lines);
                     if (Rank(result) > Rank(status)) status = result;
                 }
-                foreach (var (view, i) in theme.OpenViews.ToList().Select((v, i) => (v, i)))
+                SaveAndCheck(null);
+                foreach (var e in Enum.GetValues<SongEvent>())
                 {
-                    string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
-                    Save(Render(view), Path.Combine(outDir, $"{name}.{id}.png"));
-                    view.HeldAt = DateTime.UtcNow;
-                    try
-                    {
-                        foreach (var fault in ControlsOutOfReach(view))
-                        {
-                            faults++;
-                            lines.Add($"    FAULT view {id}: {fault}");
-                        }
-                    }
-                    finally { view.HeldAt = null; }
+                    phase = e.ToString().ToLowerInvariant();
+                    Apply(e);
+                    var (steps, check) = Plan(e);
+                    await Run(steps);
+                    if (!check) continue;
+                    await Task.Delay(150);
+                    SaveAndCheck(phase);
                 }
             }
             catch (Exception ex)
@@ -89,15 +154,22 @@ public static class LiveTestRunner
             }
             finally
             {
+                phase = null;
                 try { theme?.Close(); } catch { }
+            }
+            if (eventErrors.Count > 0)
+            {
+                withEventErrors++;
+                lines.AddRange(eventErrors.Take(8).Select(e => $"    EVENT {e}"));
             }
             counts[status] = counts.GetValueOrDefault(status) + 1;
             report.AppendLine($"{status,-8} {name}");
             foreach (var l in lines) report.AppendLine(l);
             await Task.Delay(50);
         }
+        Log.Written -= OnLog;
         report.Insert(0, $"{files.Count} skins after {seconds}s live: " + string.Join(", ", counts.OrderBy(k => k.Key).Select(k => $"{k.Value} {k.Key}")) +
-            $"; {faults} control(s) out of reach" +
+            $"; {faults} control(s) out of reach; {withEventErrors} with script errors after song events" +
             Environment.NewLine + "OK = visualizer visible; PARTLY/COVERED = drawn under other elements; HIDDEN/FADED = hidden or faded out by the skin until a button or mode shows it" +
             Environment.NewLine + Environment.NewLine);
         File.WriteAllText(Path.Combine(outDir, "live-report.txt"), report.ToString());

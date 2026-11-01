@@ -266,6 +266,9 @@ check it for updates; local builds don't.
 - `WebSkinPlayer.exe --test-live <folder|file> <outDir> [seconds]` opens each skin for real but hidden and sandboxed.
   Scripts, timers, GIFs, and player events all run, but nothing reaches your player, volume, browser, or settings.
   A made-up song plays (Glue by Bicep, moving on from 0:40), so skins that draw the time from its position show it.
+  After the first pass the song pauses, resumes, changes to a new track, jumps to 2:30 and stops; the windows are
+  saved and checked again after the pause, the change and the stop (`<skin>.<view>.paused.png` and so on), and the
+  report lists the script errors each event raised as `EVENT` lines.
   It saves every window the skin opens as `<skin>.<view>.png`, measures how much of every visualizer area is
   actually visible, and for a covered one names what is drawn over it (`live-report.txt`). It also checks that every
   button and slider a window shows can be clicked at a pixel it shows, lists each one that can't as a `FAULT`, and
