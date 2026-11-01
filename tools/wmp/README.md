@@ -41,6 +41,7 @@ pixels can be told from drawn ones.
 | `passthrough-inherited` | a passThrough subview with a fill passes clicks; passThrough doesn't reach into nested subviews; a child's own `passThrough="false"` doesn't win |
 | `pictureless-buttons` | a button with no picture, or a missing one, is 192x192 and takes clicks across it |
 | `listbox` | a Windows list: rows 1.3 times the font's pixel size, 1 px #7A7A7A border, selection #0078D4 with white text; a click selects; ITEM children come first |
+| `child-zindex` | a child subview with a zIndex below its parent's draws behind the parent's picture; a child with no zIndex, or a button, stays above |
 | `gif-timing` | a frame shows for its delay rounded up to the 1/64 s timer tick, at least 3 ticks: 0-40 ms all show 47 ms |
 | `playlists` | the playlist control's header, rows and colours with songs in it |
 

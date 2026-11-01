@@ -1,0 +1,10 @@
+<THEME id="zprobe" title="zprobe" author="test"><VIEW id="zView" backgroundColor="#202020" width="300" height="140" titleBar="false" resizable="false">
+<SUBVIEW id="hi" left="10" top="10" width="100" height="100" zIndex="20" backgroundImage="red.bmp">
+  <SUBVIEW id="below" left="5" top="5" zIndex="19" backgroundImage="green.bmp"/>
+  <SUBVIEW id="above" left="40" top="5" zIndex="21" backgroundImage="blue.bmp"/>
+  <SUBVIEW id="negative" left="5" top="60" zIndex="-1" backgroundImage="yellow.bmp"/>
+</SUBVIEW>
+<SUBVIEW id="lo" left="150" top="10" width="100" height="100" backgroundImage="red.bmp">
+  <SUBVIEW id="plus" left="5" top="5" zIndex="5" backgroundImage="white.bmp"/>
+</SUBVIEW>
+</VIEW></THEME>
