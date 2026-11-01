@@ -13,7 +13,7 @@ namespace WebSkinPlayer;
 /// through the same code paths real mouse input uses. One command per line (view coordinates):
 ///   skin &lt;path&gt; | click x y | rclick x y | move x y | drag x1 y1 x2 y2 | wheel x y delta | key Name
 ///   wait ms | capture file.png | record target frames ms scale dir | eval js-expression | vis id preset |
-///   viscolor id spec | fullmode | exit
+///   viscolor id spec | play title | fullmode | exit
 /// Results go to the app log.
 /// </summary>
 public static class AutomationRunner
@@ -36,6 +36,12 @@ public static class AutomationRunner
                 {
                     case "skin": App.Modes.ShowSkin(arg); break;
                     case "fullmode": App.Modes.ShowFullMode(); break;
+                    case "play": // play <title> : a 40 s song by that name playing in the followed app (it joins the history)
+                        App.Services.Media.Simulate(new Media.MediaSnapshot
+                        {
+                            Title = arg, SourceApp = "Automation", Status = Media.MediaStatus.Playing, Duration = TimeSpan.FromSeconds(40),
+                        }, () => TimeSpan.Zero);
+                        break;
                     case "wait": await Task.Delay((int)n[0]); break;
                     case "move": view?.HandleMouseMove(new Point(n[0], n[1])); break;
                     case "click":

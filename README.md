@@ -277,7 +277,8 @@ check it for updates; local builds don't.
 - `WebSkinPlayer.exe --automate script.txt` replays commands through the real input code:
   `click x y`, `drag x1 y1 x2 y2`, `eval js`, `capture file.png`, `capturefull file.png`, `vis Bars 0`,
   `choose Bars 0` (as picked from the right-click menu), `viscolor Bars palette:Fire|hue:120|custom:#RRGGBB` (no
-  spec for the original colours), `update` (Install Now on an available update, without asking), `skin path`,
+  spec for the original colours), `update` (Install Now on an available update, without asking), `play title`
+  (a made-up song by that name plays and joins the history), `skin path`,
   `widget`, `restore`, `fullmode`,
   `tab skins|online`, `uiclick ButtonName`, `uiselect ListName text`, `state label`, `wait ms`, `exit`.
   `record skin|full|saver|widget <frames> <ms> <scale> <dir>` saves numbered PNG frames of the skin, full mode, the
