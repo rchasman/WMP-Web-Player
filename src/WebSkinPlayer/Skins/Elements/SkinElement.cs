@@ -128,11 +128,14 @@ public class SkinElement : ScriptObject
     }
 
     /// <summary>
-    /// Children drawn before the container's background image (negative zIndex in a SUBVIEW, seen
-    /// through its transparent holes as in Goo and Creed), then those drawn after. A VIEW keeps
-    /// all its children on top: its clippingColor pixels are keyed out of the window whatever is
-    /// drawn behind them (YIL!OMA2K and Radio keep their screens visible so). A button group draws
-    /// its buttons itself.
+    /// Children drawn before a SUBVIEW's background image, then those drawn after. As measured in WMP,
+    /// a child goes under when its zIndex is negative (seen through the holes, as in Goo and Creed), or
+    /// when it is a subview that sets a zIndex below its container's: XBOX's intro (18, 19) plays under
+    /// its screen cover (20). A button stays above (deepbluesomething's face is a zIndex 1 button in a
+    /// zIndex 8 mask), and so does a child that sets no zIndex (WWC's text in its panel). A VIEW keeps
+    /// all its children on top: its clippingColor pixels are keyed out of the window whatever is drawn
+    /// behind them (YIL!OMA2K and Radio keep their screens visible so). A button group draws its
+    /// buttons itself.
     /// </summary>
     public (SkinElement[] Behind, SkinElement[] Above) ChildrenBehindAndAbove
     {
@@ -141,7 +144,8 @@ public class SkinElement : ScriptObject
             if (this is ButtonGroupElement) return ([], []);
             var all = Children.OrderBy(c => c.ZIndex).ThenBy(c => c.Order).ToArray();
             if (!ClipsChildren || this is SkinView) return ([], all);
-            return (all.Where(c => c.ZIndex < 0).ToArray(), all.Where(c => c.ZIndex >= 0).ToArray());
+            bool Behind(SkinElement c) => c.ZIndex < 0 || (c is SubviewElement && c.HasValue("zindex") && c.ZIndex < ZIndex);
+            return (all.Where(Behind).ToArray(), all.Where(c => !Behind(c)).ToArray());
         }
     }
 
