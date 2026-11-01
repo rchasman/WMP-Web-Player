@@ -29,6 +29,11 @@ class `WMP Skin Host` named by view id, and their descendants are the skin's ele
 are `SetCursorPos` and `mouse_event`; a full-screen window behind WMP turns black or white so clear
 pixels can be told from drawn ones.
 
+A process that has used UI Automation before WMP starts gets WMP's skin window without element
+names, named "Windows Media Player Legacy" instead of by view id, and keeps getting it through
+reloads. So each script starts WMP from a parent that never touches UI Automation and does the
+rest in a new child process per skin.
+
 ## What the probes found
 
 | probe | WMP |

@@ -4,32 +4,59 @@ Add-Type -Namespace Wmp -Name Mouse -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, System.IntPtr extra);
 '@
-$Root = [Windows.Automation.AutomationElement]::RootElement
 $Exe = "$env:ProgramFiles\Windows Media Player\wmplayer.exe"
 
-# Invokes the first control named $label anywhere on the desktop (WMP's "View Now").
-function Press($label) {
+# Every control named $label anywhere on the desktop.
+function Find-Named($label) {
     $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty, $label)
-    $b = $Root.FindFirst([Windows.Automation.TreeScope]::Descendants, $cond)
-    if ($b) { $b.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke(); return $true }
+    @([Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Descendants, $cond))
+}
+
+# Presses a control named $label: invokes the first that can be invoked, else clicks the first one
+# on screen. WMP's download dialog has more than one element named "View Now", not all invokable.
+function Press($label) {
+    $found = Find-Named $label
+    foreach ($e in $found) {
+        $pattern = $null
+        if ($e.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke(); return $true }
+    }
+    foreach ($e in $found) {
+        $r = $e.Current.BoundingRectangle
+        if (-not $r.IsEmpty) { Click ([int]($r.X + $r.Width / 2)) ([int]($r.Y + $r.Height / 2)); return $true }
+    }
     $false
 }
 
-# Starts WMP on a skin and waits $settle seconds after it shows; false when WMP never offered it.
-function Open-Skin($path, $settle) {
+# Starts WMP on a skin. A process that used UI Automation before WMP started gets WMP's skin
+# window without element names, so the scripts call this from a parent that never touches UI
+# Automation and do the rest in a fresh child (Invoke-Child).
+function Start-Skin($path) {
     Stop-Process -Name wmplayer -Force -ErrorAction SilentlyContinue; Start-Sleep 2
     Remove-Item "$env:APPDATA\Microsoft\Media Player\Skins\*" -Force -Recurse -ErrorAction SilentlyContinue
     Start-Process $Exe -ArgumentList "/layout:`"$path`""
-    $pressed = $false
-    for ($t = 0; $t -lt 30 -and -not $pressed; $t++) { Start-Sleep 1; $pressed = Press 'View Now' }
-    if ($pressed) { Start-Sleep $settle }
-    $pressed
+    Start-Sleep 3
+}
+
+# Runs the calling script again in a new process with $arguments, after Start-Skin.
+function Invoke-Child($arguments) { & pwsh -NoProfile -File $MyInvocation.PSCommandPath @arguments }
+
+# Presses "View Now" and waits $settle seconds once the skin shows; false when WMP never offered it.
+function Show-Skin($settle) {
+    for ($t = 0; $t -lt 30; $t++) {
+        if (Press 'View Now') {
+            Start-Sleep 2
+            if ((Find-Named 'View Now').Count -eq 0) { Start-Sleep $settle; return $true }
+        }
+        Start-Sleep 1
+    }
+    Write-Host ("View Now still showing: " + ((Find-Named 'View Now' | ForEach-Object { $_.Current.ControlType.ProgrammaticName }) -join ', '))
+    $false
 }
 
 # WMP's skin windows: UI Automation elements of class "WMP Skin Host", named by view id.
 function Skin-Windows {
     $pids = @(Get-Process wmplayer -ErrorAction SilentlyContinue | ForEach-Object Id)
-    $Root.FindAll([Windows.Automation.TreeScope]::Children, [Windows.Automation.Condition]::TrueCondition) |
+    [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, [Windows.Automation.Condition]::TrueCondition) |
         Where-Object { $pids -contains $_.Current.ProcessId -and $_.Current.ClassName -eq 'WMP Skin Host' }
 }
 
