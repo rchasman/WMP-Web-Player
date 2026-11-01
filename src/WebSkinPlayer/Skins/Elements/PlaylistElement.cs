@@ -9,8 +9,8 @@ namespace WebSkinPlayer.Skins.Elements;
 /// <summary>
 /// PLAYLIST / ITEMSPLAYLIST / DROPDOWNPLAYLIST: the tracks heard this session. WMP drew it as Windows controls,
 /// a combo box naming the playlist over a details list in Segoe UI 9 pt, whatever the skin's font. The sizes,
-/// colours and column rules were measured in real WMP on a GitHub runner (the playlists, playlist-columns and
-/// playlist-widths probes on the Mac branch).
+/// colours and column rules were measured in real WMP on a GitHub runner (the playlists, playlist-columns,
+/// playlist-widths, playlist-headers, playlist-cells and playlist-single probes on the Mac branch).
 /// </summary>
 public sealed class PlaylistElement : SkinElement
 {
@@ -25,8 +25,8 @@ public sealed class PlaylistElement : SkinElement
     protected override Dictionary<string, PType>? Schema => S;
 
     const double Combo = 24, Toolbar = 29, Header = 24, Row = 19, ScrollBar = 17;
-    /// <summary>The space a cell keeps around its text, a header label's wider margin, and the playing band's left gap.</summary>
-    const double Pad = 6, HeaderPad = 8, BandInset = 4;
+    /// <summary>Where a cell's text starts, and the playing band's left gap.</summary>
+    const double Pad = 6, BandInset = 4;
     /// <summary>WMP's columns when a skin names none.</summary>
     const string DefaultColumns = "name=Title;duration=Length;artist=Artist;genre=Genre";
 
@@ -66,7 +66,17 @@ public sealed class PlaylistElement : SkinElement
     public override int NaturalHeight => GetBool("playlistitemsvisible") ? 0
         : (GetBool("dropdownvisible") ? (int)Combo : 0) + (GetBool("toolbarvisible") ? (int)Toolbar : 0);
 
-    sealed record Column(string Field, string Label, double Width);
+    /// <summary>A column, and the room it keeps beside its header label and beside its cells.</summary>
+    sealed record Column(string Field, string Label, double Width, double HeaderPad, double CellPad);
+
+    /// <summary>WMP's margins depend on the column's place: (header, cell, narrowest width), measured on a runner.</summary>
+    static (double Header, double Cell, double Narrowest) Margins(int index, int count) => index switch
+    {
+        _ when count == 1 => (15, 8, 30),
+        0 => (16, 12, 34),
+        _ when index == count - 1 => (15, 12, 25),
+        _ => (12, 12, 25),
+    };
 
     sealed record Layout(Rect? Combo, Rect? Toolbar, Rect? Header, Rect Rows, List<Column> Columns, int First, int LastFirst, Rect? VScroll, Rect? HScroll);
 
@@ -76,8 +86,6 @@ public sealed class PlaylistElement : SkinElement
 
     FormattedText Text(string s, int rgb) => new(s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, ListFace, ListPx,
         Brush(rgb), VisualTreeHelper.GetDpi(View.Surface).PixelsPerDip);
-
-    double Measure(string s) => s.Length == 0 ? 0 : Text(s, 0).WidthIncludingTrailingWhitespace;
 
     /// <summary>A track's text in a column; WMP left fields it doesn't know about empty.</summary>
     static string Cell(TrackInfo t, string field) => field switch
@@ -120,15 +128,16 @@ public sealed class PlaylistElement : SkinElement
         double rowsH = itemsShown ? Math.Max(0, b.Bottom - y) : 0;
         int first = Window(rowsH).First, fits = (int)Math.Floor(rowsH / Row);
         string spec = GetString("columns");
-        // A Windows list sizes each column to its header and the rows in view, not to the box.
-        var columns = (spec.Trim().Length == 0 ? DefaultColumns : spec).Split(';')
-            .Select(part => part.Split('=', 2)).Where(kv => kv.Length == 2)
-            .Select(kv =>
+        // A Windows list sizes each column to its header and the rows in view, by GDI widths, not to the box.
+        var parts = (spec.Trim().Length == 0 ? DefaultColumns : spec).Split(';')
+            .Select(part => part.Split('=', 2)).Where(kv => kv.Length == 2).ToList();
+        var columns = parts.Select((kv, i) =>
             {
                 string field = kv[0].Trim().ToLowerInvariant(), label = kv[1].Trim();
-                double width = items.Skip(first).Take(fits).Select(t => Measure(Cell(t, field)) + 2 * Pad)
-                    .Aggregate(Measure(label) + 2 * HeaderPad, Math.Max);
-                return new Column(field, label, Math.Round(width));
+                var (headerPad, cellPad, narrowest) = Margins(i, parts.Count);
+                double width = items.Skip(first).Take(fits).Select(t => GdiText.Width(Cell(t, field)) + cellPad)
+                    .Aggregate(Math.Max(GdiText.Width(label) + headerPad, narrowest), Math.Max);
+                return new Column(field, label, width, headerPad, cellPad);
             }).ToList();
         double total = columns.Sum(c => c.Width);
         bool vertical = itemsShown && items.Count * Row > rowsH;
@@ -165,23 +174,7 @@ public sealed class PlaylistElement : SkinElement
 
     int Colour(string attr, int fallback) => SkinImages.ParseColor(GetString(attr)) ?? fallback;
 
-    /// <summary>The longest start of <paramref name="s"/> that fits <paramref name="room"/> with "..." after it, as a Windows list cut it.</summary>
-    string Ellipsize(string s, double room)
-    {
-        if (Measure(s) <= room) return s;
-        int lo = 0, hi = s.Length;
-        while (lo < hi)
-        {
-            int mid = (lo + hi + 1) / 2;
-            if (Measure(s[..mid] + "...") <= room) lo = mid; else hi = mid - 1;
-        }
-        return s[..lo] + "...";
-    }
-
-    /// <summary>The width a cell's text may take; the column was rounded from the same measure, so allow that rounding.</summary>
-    static double TextRoom(double width) => Math.Max(1, width - 2 * Pad + 0.5);
-
-    double TextX(string field, string s, double x, double width) => field == "duration" ? x + width - Pad - Measure(s) : x + Pad;
+    static double TextX(string field, string s, double x, double width) => field == "duration" ? x + width - Pad - GdiText.Width(s) : x + Pad;
 
     void Draw(DrawingContext dc, string s, double x, double y, int rgb, Rect clip)
     {
@@ -207,7 +200,7 @@ public sealed class PlaylistElement : SkinElement
             double x = h.X;
             foreach (var col in l.Columns)
             {
-                string label = Ellipsize(col.Label, TextRoom(col.Width));
+                string label = GdiText.EndEllipsis(col.Label, col.Width - col.HeaderPad);
                 Draw(dc, label, TextX(col.Field, label, x, col.Width), h.Y + 4, 0, Rect.Intersect(new Rect(x, h.Y, col.Width, h.Height), h));
                 Fill(dc, new Rect(x + col.Width - 1, h.Y, 1, h.Height), 0xE5E5E5);
                 x += col.Width;
@@ -232,14 +225,14 @@ public sealed class PlaylistElement : SkinElement
                     string s = Cell(items[i], col.Field);
                     if (s.Length > 0)
                     {
-                        s = Ellipsize(s, TextRoom(col.Width));
+                        s = GdiText.EndEllipsis(s, col.Width - col.CellPad);
                         Draw(dc, s, TextX(col.Field, s, x, col.Width), y + 2, current ? playing : fg, Rect.Intersect(new Rect(x, y, col.Width, Row), rows));
                     }
                     x += col.Width;
                 }
             }
             if (items.Count == 0 && rows.Height >= Row)
-                Draw(dc, Ellipsize("Play something in your browser", Math.Max(1, rows.Width - 2 * Pad)), rows.X + Pad, rows.Y + 2, fg, rows);
+                Draw(dc, GdiText.EndEllipsis("Play something in your browser", rows.Width - 2 * Pad), rows.X + Pad, rows.Y + 2, fg, rows);
             dc.Pop();
         }
         if (l.VScroll is { } vs) DrawScrollBar(dc, vs, vertical: true, l.First, rows.Height / Row, items.Count);
@@ -281,7 +274,7 @@ public sealed class PlaylistElement : SkinElement
         Fill(dc, new Rect(r.X, r.Bottom - 3, r.Width, 2), 0xDCDFE0);
         Fill(dc, new Rect(r.X, r.Bottom - 1, r.Width, 1), 0xA9B7C9);
         Draw(dc, name, r.X + 9, r.Y + 6, 0, r);
-        double x = r.X + 9 + Measure(name) + 8;
+        double x = r.X + 9 + GdiText.Width(name) + 8;
         for (int k = 0; k < 4; k++) Fill(dc, new Rect(x + k, r.Y + 12 + k, 7 - 2 * k, 1), 0);
         dc.Pop();
     }
