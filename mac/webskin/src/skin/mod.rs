@@ -1354,6 +1354,28 @@ mod tests {
         });
     }
 
+    /// WMP's docs give TEXT.fontSize a default of 10 points, which Windows drew as 13-pixel
+    /// Tahoma on 16-pixel lines (UI Automation on a GitHub runner); 8 points made 13-pixel lines.
+    #[test]
+    fn text_takes_wmps_default_size_in_whole_pixels() {
+        let dir = temp_dir("text-size");
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="300" height="60">
+                 <TEXT id="plain" value="Turn all albums into playlists"/>
+                 <TEXT id="small" top="30" fontSize="8" value="Turn all albums into playlists"/>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        shared.read(|s| {
+            let id = |name: &str| s.view(v).by_id[name];
+            assert_eq!(s.height(v, id("plain")), 16);
+            assert_eq!(s.height(v, id("small")), 13);
+        });
+    }
+
     /// QuickSilver lays disabled buttons over its real ones as artwork.
     #[test]
     fn a_disabled_button_lets_clicks_reach_the_button_under_it() {

@@ -21,9 +21,14 @@ fn with_fonts<T>(f: impl FnOnce(&mut FontSystem, &mut SwashCache, &mut HashMap<S
     })
 }
 
-/// WMP font sizes are points at 96 dpi.
+/// WMP font sizes are points at 96 dpi, which Windows rounded to whole pixels.
 pub fn points_to_px(pt: f64) -> f32 {
-    (pt.max(1.0) * 96.0 / 72.0) as f32
+    (pt.max(1.0) * 96.0 / 72.0).round() as f32
+}
+
+/// A line's height for a font of `px` pixels, as Windows rounded Tahoma's ascent plus descent.
+fn line_height(px: f32) -> f32 {
+    (px * 1.21).round()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -73,7 +78,7 @@ fn layout(
     wrap: Option<f32>,
 ) -> Buffer {
     let px = style.px * scale;
-    let mut buffer = Buffer::new(fs, Metrics::new(px, (px * 1.21).ceil()));
+    let mut buffer = Buffer::new(fs, Metrics::new(px, line_height(style.px) * scale));
     let family = resolve_family(fs, families, &style.face);
     let attrs = Attrs::new()
         .family(family.as_deref().map_or(Family::SansSerif, Family::Name))
@@ -89,12 +94,12 @@ fn layout(
 /// (width, height) in logical pixels; `wrap` gives a width to wrap words at.
 pub fn measure(text: &str, style: &TextStyle, wrap: Option<f32>) -> (f32, f32) {
     if text.is_empty() {
-        return (0.0, (style.px * 1.21).ceil());
+        return (0.0, line_height(style.px));
     }
     with_fonts(|fs, _, families| {
         let b = layout(fs, families, text, style, 1.0, wrap);
         let (w, lines) = b.layout_runs().fold((0f32, 0usize), |(w, n), run| (w.max(run.line_w), n + 1));
-        (w, lines.max(1) as f32 * (style.px * 1.21).ceil())
+        (w, lines.max(1) as f32 * line_height(style.px))
     })
 }
 

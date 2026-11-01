@@ -463,7 +463,9 @@ impl Skin {
             (Kind::Text, "foregroundcolor") => "#FFFFFF".into(),
             (Kind::Text, "backgroundcolor") => "none".into(),
             (Kind::Text, "fontface") | (Kind::Playlist, "fontface") => "Tahoma".into(),
-            (Kind::Text, "fontsize") | (Kind::Playlist, "fontsize") => 8.0.into(),
+            // WMP's docs give TEXT.fontSize a default of 10 points.
+            (Kind::Text, "fontsize") => 10.0.into(),
+            (Kind::Playlist, "fontsize") => 8.0.into(),
             (Kind::Text, "fontstyle") => "normal".into(),
             (Kind::Text, "fontsmoothing") => true.into(),
             (Kind::Text, "justification") => "left".into(),
