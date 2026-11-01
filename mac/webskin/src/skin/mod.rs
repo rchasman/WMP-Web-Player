@@ -1295,6 +1295,38 @@ mod tests {
         });
     }
 
+    /// The Skins Factory's playlist choosers (Disney, Batman Begins and six more) fill a LISTBOX
+    /// from script and act on selectedItem_onChange; WMP drew it as a Windows list.
+    #[test]
+    fn a_listbox_holds_lines_selects_on_click_and_draws_the_selection() {
+        let dir = temp_dir("listbox");
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="100" height="60" backgroundColor="#000000">
+                 <LISTBOX id="lb" width="100" height="60" border="false" fontSize="8" backgroundColor="#07070A"
+                          selectedItem_onChange="picked = selectedItem;"><ITEM value="From markup"/></LISTBOX>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        let script = shared.script(v).unwrap();
+        script.execute(r#"lb.appendItem("Now Playing"); lb.appendItem("Gym"); var n = lb.itemCount; var second = lb.getItem(1);"#, "test").unwrap();
+        assert!(shared.errors.borrow().is_empty(), "{:?}", shared.errors.borrow());
+        assert_eq!(script.get_global("n").to_number(), 3.0, "ITEM children come first");
+        assert_eq!(script.get_global("second").to_str(), "Now Playing");
+        let row = shared.read(|s| s.listbox_layout(v, s.view(v).by_id["lb"]).1);
+        shared.with(|s| {
+            s.mouse_down(v, 10.0, row * 2.0 + 2.0, MouseButton::Left, 1, (false, false, false));
+            s.mouse_up(v, 10.0, row * 2.0 + 2.0, MouseButton::Left, (false, false, false));
+        });
+        assert_eq!(script.get_global("picked").to_number(), 2.0, "a click on the third line selects it");
+        let pm = shared.read(|s| s.render_view(v, 1.0)).unwrap().pixmap;
+        let at = |y: f64| pm.pixel(90, y as u32).map(|p| (p.red(), p.green(), p.blue()));
+        assert_eq!(at(row * 2.0 + 2.0), Some((0x00, 0x78, 0xD4)), "the selected line is highlighted");
+        assert_eq!(at(2.0), Some((7, 7, 10)), "the others show the background");
+    }
+
     /// QuickSilver lays disabled buttons over its real ones as artwork.
     #[test]
     fn a_disabled_button_lets_clicks_reach_the_button_under_it() {

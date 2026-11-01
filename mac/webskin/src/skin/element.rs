@@ -27,6 +27,8 @@ pub enum Kind {
     EqualizerSettings,
     VideoSettings,
     Popup,
+    /// A POPUP shown in the window (WMP's docs: identical but for popUp's default).
+    ListBox,
     AutoMenu,
     NonVisual,
 }
@@ -38,7 +40,8 @@ pub struct State {
     pub drag_offset: f64,
     /// Marquee offset of a scrolling TEXT.
     pub scroll: f64,
-    pub popup_items: Vec<String>,
+    /// A POPUP's or LISTBOX's lines.
+    pub items: Vec<String>,
     pub playlist_top: usize,
     /// EQUALIZERSETTINGS applying a preset (its gain changes don't switch to Custom), or EFFECTS
     /// reporting the visualization it switched to.
@@ -108,7 +111,8 @@ pub fn kind_for(tag: &str, parent: Kind) -> Kind {
         "TEXT" | "STATUSTEXT" | "CURRENTPOSITIONTEXT" | "METADATATEXT" | "DURATIONTEXT" => Kind::Text,
         "EFFECTS" | "WMPEFFECTS" => Kind::Effects,
         "VIDEO" | "WMPVIDEO" => Kind::Video,
-        "PLAYLIST" | "ITEMSPLAYLIST" | "DROPDOWNPLAYLIST" | "LISTBOX" => Kind::Playlist,
+        "PLAYLIST" | "ITEMSPLAYLIST" | "DROPDOWNPLAYLIST" => Kind::Playlist,
+        "LISTBOX" => Kind::ListBox,
         "EQUALIZERSETTINGS" => Kind::EqualizerSettings,
         "VIDEOSETTINGS" => Kind::VideoSettings,
         "POPUP" => Kind::Popup,
@@ -282,6 +286,17 @@ const EQUALIZER: &[(&str, PType)] = &[
 ];
 const VIDEO_SETTINGS: &[(&str, PType)] = &[("brightness", I), ("contrast", I), ("hue", I), ("saturation", I)];
 const POPUP: &[(&str, PType)] = &[("selecteditem", I), ("backgroundcolor", S), ("foregroundcolor", S)];
+const LISTBOX: &[(&str, PType)] = &[
+    ("selecteditem", I),
+    ("firstvisibleitem", I),
+    ("backgroundcolor", S),
+    ("foregroundcolor", S),
+    ("fontface", S),
+    ("fontsize", N),
+    ("fontstyle", S),
+    ("border", B),
+    ("sorted", B),
+];
 
 fn schema(kind: Kind) -> &'static [(&'static str, PType)] {
     match kind {
@@ -299,6 +314,7 @@ fn schema(kind: Kind) -> &'static [(&'static str, PType)] {
         Kind::EqualizerSettings => EQUALIZER,
         Kind::VideoSettings => VIDEO_SETTINGS,
         Kind::Popup => POPUP,
+        Kind::ListBox => LISTBOX,
         Kind::AutoMenu | Kind::NonVisual => &[],
     }
 }
@@ -459,7 +475,14 @@ impl Skin {
             (Kind::EqualizerSettings, "enabled" | "enable") => false.into(),
             (Kind::EqualizerSettings, "splinetension" | "speakersize") => 1.0.into(),
             (Kind::EqualizerSettings, n) if n.starts_with("gainlevel") => 0.0.into(),
-            (Kind::Popup, "selecteditem") => (-1.0).into(),
+            (Kind::Popup | Kind::ListBox, "selecteditem") => (-1.0).into(),
+            // As WMP drew a LISTBOX on Windows 11 (measured on a GitHub runner).
+            (Kind::ListBox, "backgroundcolor") => "#FFFFFF".into(),
+            (Kind::ListBox, "foregroundcolor") => "#000000".into(),
+            (Kind::ListBox, "fontface") => "Segoe UI".into(),
+            (Kind::ListBox, "fontsize") => 9.0.into(),
+            (Kind::ListBox, "fontstyle") => "normal".into(),
+            (Kind::ListBox, "border") => true.into(),
             _ => Value::Null,
         }
     }
@@ -480,7 +503,7 @@ impl Skin {
             (Kind::EqualizerSettings, "currentspeakername") => {
                 Some(["Small", "Medium", "Large"][self.get_int(v, e, "speakersize").clamp(0, 2) as usize].into())
             }
-            (Kind::Popup, "itemcount") => Some(el.state.popup_items.len().into()),
+            (Kind::Popup | Kind::ListBox, "itemcount") => Some(el.state.items.len().into()),
             (Kind::Playlist, "itemcount") => Some(self.history.len().into()),
             (Kind::Playlist, "playlist") => Some(crate::value::ObjRef::CurrentPlaylist.into()),
             (Kind::Effects | Kind::Video, _) => self.effects_computed(v, e, name),
@@ -493,7 +516,7 @@ impl Skin {
             Kind::View => &["left", "top"],
             Kind::Text => &["textwidth", "textheight"],
             Kind::EqualizerSettings => &["presetcount", "currentpresettitle", "currentspeakername"],
-            Kind::Popup => &["itemcount"],
+            Kind::Popup | Kind::ListBox => &["itemcount"],
             Kind::Playlist => &["itemcount", "playlist"],
             Kind::Effects | Kind::Video => {
                 &["currenteffecttitle", "currentpresettitle", "effectcount", "presetcount", "effectcangofullscreen", "effecthaspropertypage"]
@@ -558,6 +581,24 @@ impl Skin {
             Kind::Popup => {
                 &["moveto", "alphablendto", "resizeto", "setfocus", "removeelement", "appenditem", "deleteitem", "deleteall", "show", "dismiss"]
             }
+            Kind::ListBox => &[
+                "moveto",
+                "alphablendto",
+                "resizeto",
+                "setfocus",
+                "removeelement",
+                "appenditem",
+                "insertitem",
+                "deleteitem",
+                "deleteall",
+                "getitem",
+                "replaceitem",
+                "finditem",
+                "getnextselecteditem",
+                "setselectedstate",
+                "show",
+                "dismiss",
+            ],
             Kind::AutoMenu => &["moveto", "alphablendto", "resizeto", "setfocus", "removeelement", "show"],
             Kind::Playlist => &[
                 "moveto",
@@ -862,7 +903,7 @@ impl Skin {
     /// Whether a click here goes to the element rather than dragging the window.
     pub fn interactive(&self, v: ViewId, e: usize) -> bool {
         match self.el(v, e).kind {
-            Kind::Button | Kind::ButtonGroup | Kind::GroupButton | Kind::Slider | Kind::CustomSlider | Kind::Playlist => true,
+            Kind::Button | Kind::ButtonGroup | Kind::GroupButton | Kind::Slider | Kind::CustomSlider | Kind::Playlist | Kind::ListBox => true,
             Kind::Effects | Kind::Video => ["onclick", "ondblclick", "onmousedown"].iter().any(|h| self.has_handler(v, e, h)),
             _ => ["onclick", "onmousedown", "onmouseup", "ondblclick"].iter().any(|h| self.has_handler(v, e, h)),
         }
@@ -1038,6 +1079,7 @@ impl Skin {
                 }
             }
             Kind::Playlist => self.render_playlist(v, e, c, b, clip),
+            Kind::ListBox => self.render_listbox(v, e, c, b, clip),
             _ => {}
         }
     }
@@ -1362,6 +1404,54 @@ impl Skin {
         if items.is_empty() {
             let hint = text::ellipsize("Play something in Spotify, Music or your browser", &normal, (b.w - 8.0).max(1.0) as f32);
             c.draw_text(&text::rasterize(&hint, &normal, c.scale, None), b.x + 4.0, b.y + 4.0, fg, clip);
+        }
+    }
+
+    /// A LISTBOX's text style, row height and inset: WMP drew it as a Windows list control, rows
+    /// about 1.3 times the font's pixel size, inside a one-pixel border when it has one.
+    pub fn listbox_layout(&self, v: ViewId, e: usize) -> (TextStyle, f64, f64) {
+        let style = TextStyle::new(&self.get_str(v, e, "fontface"), self.get_num(v, e, "fontsize").max(6.0), &self.get_str(v, e, "fontstyle"));
+        let row = (f64::from(style.px) * 1.3).ceil();
+        let inset = if self.get_bool(v, e, "border") { 1.0 } else { 0.0 };
+        (style, row, inset)
+    }
+
+    /// The LISTBOX line under local (x, y), if any.
+    pub fn listbox_item_at(&self, v: ViewId, e: usize, y: f64) -> Option<usize> {
+        let (_, row, inset) = self.listbox_layout(v, e);
+        let first = self.get_int(v, e, "firstvisibleitem").max(0) as usize;
+        let i = first + ((y - inset) / row).floor().max(0.0) as usize;
+        (i < self.el(v, e).state.items.len()).then_some(i)
+    }
+
+    fn render_listbox(&self, v: ViewId, e: usize, c: &mut Canvas, b: Rect, clip: Rect) {
+        let clip = clip.intersect(&b);
+        let (style, row, inset) = self.listbox_layout(v, e);
+        if inset > 0.0 {
+            c.fill(b, 0x7A_7A7A, clip);
+        }
+        let inner = Rect::new(b.x + inset, b.y + inset, b.w - 2.0 * inset, b.h - 2.0 * inset);
+        let clip = clip.intersect(&inner);
+        if let Some(bg) = parse_color(&self.get_str(v, e, "backgroundcolor")) {
+            c.fill(inner, bg, clip);
+        }
+        let fg = parse_color(&self.get_str(v, e, "foregroundcolor")).unwrap_or(0);
+        let selected = self.get_int(v, e, "selecteditem");
+        let first = self.get_int(v, e, "firstvisibleitem").max(0) as usize;
+        let mut y = inner.y;
+        for (i, line) in self.el(v, e).state.items.iter().enumerate().skip(first) {
+            if y >= inner.bottom() {
+                break;
+            }
+            let rgb = if i as i32 == selected {
+                c.fill(Rect::new(inner.x, y, inner.w, row), 0x00_78D4, clip);
+                0xFF_FFFF
+            } else {
+                fg
+            };
+            let label = text::ellipsize(line, &style, (inner.w - 4.0).max(1.0) as f32);
+            c.draw_text(&text::rasterize(&label, &style, c.scale, None), inner.x + 2.0, y + 1.0, rgb, clip);
+            y += row;
         }
     }
 }

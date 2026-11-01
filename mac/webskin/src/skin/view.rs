@@ -240,6 +240,11 @@ impl Skin {
         for c in &node.children {
             self.build_node(v, c, e, order, plan);
         }
+        if matches!(kind, Kind::Popup | Kind::ListBox) {
+            let lines: Vec<String> =
+                self.el(v, e).children.iter().filter(|&&c| self.el(v, c).tag == "ITEM").map(|&c| self.get_str(v, c, "value")).collect();
+            self.el_mut(v, e).state.items = lines;
+        }
     }
 
     fn apply_presets(&mut self, v: ViewId, e: usize, node: &WmsNode, plan: &mut Plan) {
@@ -1018,7 +1023,9 @@ impl Skin {
     pub fn mouse_wheel(&mut self, v: ViewId, x: f64, y: f64, delta: f64) {
         let hit = self.hit_test_point(v, x, y).or(self.view(v).focus);
         match hit {
-            Some(h) if matches!(self.el(v, h).kind, Kind::Slider | Kind::CustomSlider | Kind::Playlist) => self.element_wheel(v, h, delta),
+            Some(h) if matches!(self.el(v, h).kind, Kind::Slider | Kind::CustomSlider | Kind::Playlist | Kind::ListBox) => {
+                self.element_wheel(v, h, delta)
+            }
             Some(h) if self.interactive(v, h) => self.element_wheel(v, h, delta),
             _ => {
                 let vol = self.player.volume() + if delta > 0.0 { 5 } else { -5 };
@@ -1106,6 +1113,11 @@ impl Skin {
                 }
             }
             Kind::Playlist => self.focus(v, Some(e)),
+            Kind::ListBox => {
+                if let Some(i) = self.listbox_item_at(v, e, y) {
+                    self.set_value(v, e, "selecteditem", i.into(), true);
+                }
+            }
             _ => {}
         }
     }
@@ -1166,6 +1178,14 @@ impl Skin {
             Kind::Playlist => {
                 let el = self.el_mut(v, e);
                 el.state.playlist_top = if delta > 0.0 { el.state.playlist_top.saturating_sub(1) } else { el.state.playlist_top + 1 };
+                self.view_mut(v).invalidate();
+            }
+            Kind::ListBox => {
+                let (_, row, inset) = self.listbox_layout(v, e);
+                let shown = ((f64::from(self.height(v, e)) - 2.0 * inset) / row).floor().max(1.0) as i32;
+                let last = (self.el(v, e).state.items.len() as i32 - shown).max(0);
+                let first = (self.get_int(v, e, "firstvisibleitem") - delta.signum() as i32).clamp(0, last);
+                self.set_value(v, e, "firstvisibleitem", f64::from(first).into(), true);
                 self.view_mut(v).invalidate();
             }
             _ => {}
@@ -1406,7 +1426,7 @@ pub fn show_popup(shared: &Shared, v: ViewId, e: usize, args: &[Value]) -> Value
         let items: Vec<MenuItem> = s
             .el(v, e)
             .state
-            .popup_items
+            .items
             .iter()
             .enumerate()
             .map(|(i, label)| {
@@ -1520,21 +1540,81 @@ impl Skin {
                 }
                 Value::Null
             }
-            (Kind::Popup, "appenditem") => {
-                let items = &mut self.el_mut(v, e).state.popup_items;
-                items.push(arg(0).to_str());
-                (items.len() - 1).into()
+            (Kind::ListBox, "appenditem") if self.get_bool(v, e, "sorted") => {
+                let line = arg(0).to_str();
+                let items = &mut self.el_mut(v, e).state.items;
+                let at = items.partition_point(|i| i.to_lowercase() <= line.to_lowercase());
+                items.insert(at, line);
+                self.view_mut(v).invalidate();
+                at.into()
             }
-            (Kind::Popup, "deleteitem") => {
+            (Kind::Popup | Kind::ListBox, "appenditem") => {
+                let items = &mut self.el_mut(v, e).state.items;
+                items.push(arg(0).to_str());
+                let at = items.len() - 1;
+                self.view_mut(v).invalidate();
+                at.into()
+            }
+            (Kind::ListBox, "insertitem") => {
+                let items = &mut self.el_mut(v, e).state.items;
+                let at = (num(0).max(0.0) as usize).min(items.len());
+                items.insert(at, arg(1).to_str());
+                self.view_mut(v).invalidate();
+                Value::Null
+            }
+            (Kind::Popup | Kind::ListBox, "deleteitem") => {
                 let i = num(0);
-                let items = &mut self.el_mut(v, e).state.popup_items;
-                if i >= 0.0 && (i as usize) < items.len() {
-                    items.remove(i as usize);
+                if i >= 0.0 && (i as usize) < self.el(v, e).state.items.len() {
+                    self.el_mut(v, e).state.items.remove(i as usize);
+                    let selected = self.get_int(v, e, "selecteditem");
+                    if kind == Kind::ListBox && selected >= i as i32 {
+                        let now = if selected == i as i32 { -1 } else { selected - 1 };
+                        self.set_value(v, e, "selecteditem", f64::from(now).into(), false);
+                    }
+                    self.view_mut(v).invalidate();
                 }
                 Value::Null
             }
-            (Kind::Popup, "deleteall") => {
-                self.el_mut(v, e).state.popup_items.clear();
+            (Kind::Popup | Kind::ListBox, "deleteall") => {
+                self.el_mut(v, e).state.items.clear();
+                if kind == Kind::ListBox {
+                    self.set_value(v, e, "selecteditem", (-1.0).into(), false);
+                    self.set_value(v, e, "firstvisibleitem", 0.0.into(), false);
+                }
+                self.view_mut(v).invalidate();
+                Value::Null
+            }
+            (Kind::ListBox, "getitem") => self.el(v, e).state.items.get(num(0).max(0.0) as usize).cloned().unwrap_or_default().into(),
+            (Kind::ListBox, "replaceitem") => {
+                if let Some(line) = self.el_mut(v, e).state.items.get_mut(num(0).max(0.0) as usize) {
+                    *line = arg(1).to_str();
+                    self.view_mut(v).invalidate();
+                }
+                Value::Null
+            }
+            // A Windows list box's find: the first line after `start` that begins with the text,
+            // ignoring case, wrapping round.
+            (Kind::ListBox, "finditem") => {
+                let (items, text) = (&self.el(v, e).state.items, arg(1).to_str().to_lowercase());
+                let n = items.len();
+                let start = (num(0) + 1.0).max(0.0) as usize;
+                (0..n).map(|k| (start + k) % n).find(|&i| items[i].to_lowercase().starts_with(&text)).map_or(-1.0, |i| i as f64).into()
+            }
+            (Kind::ListBox, "getnextselecteditem") => {
+                let selected = self.get_int(v, e, "selecteditem");
+                if selected > num(0) as i32 { selected.into() } else { (-1.0).into() }
+            }
+            (Kind::ListBox, "setselectedstate") => {
+                let (i, on) = (num(0) as i32, arg(1).to_bool());
+                if on {
+                    self.set_value(v, e, "selecteditem", f64::from(i).into(), true);
+                } else if self.get_int(v, e, "selecteditem") == i {
+                    self.set_value(v, e, "selecteditem", (-1.0).into(), true);
+                }
+                Value::Null
+            }
+            (Kind::ListBox, "show" | "dismiss") => {
+                self.set_value(v, e, "visible", (name == "show").into(), true);
                 Value::Null
             }
             (Kind::Popup, "dismiss") => Value::Null,
