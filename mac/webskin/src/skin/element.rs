@@ -1054,7 +1054,7 @@ impl Skin {
     /// The alpha of background `bg` at local (x, y) in the frame showing now (anime's animated
     /// background covers its sliders only in some frames).
     fn background_alpha(&self, v: ViewId, e: usize, bg: &SkinBitmap, x: f64, y: f64) -> u8 {
-        let (bx, by) = self.background_pixel(v, e, bg, x, y);
+        let (bx, by) = self.background_pixel(v, e, bg)(x, y);
         let shown = match self.el(v, e).anim_start.borrow().get(&self.get_str(v, e, "backgroundimage")) {
             Some(start) if bg.is_animated() => bg.frame_at(self.now.duration_since(*start).as_secs_f64() * 1000.0).0,
             _ => bg.source(),
@@ -1068,18 +1068,21 @@ impl Skin {
             || images::is_dynamic(&self.get_str(v, e, "backgroundimage"))
     }
 
-    /// The pixel of a subview's background image `bg` drawn at its local point (x, y): stretched
-    /// over it, tiled, or once at its top-left.
-    pub fn background_pixel(&self, v: ViewId, e: usize, bg: &SkinBitmap, x: f64, y: f64) -> (i32, i32) {
+    /// Maps a subview's local point (x, y) to the pixel of its background image `bg` drawn there:
+    /// stretched over it, tiled, or once at its top-left. The settings are read once, so it suits a
+    /// loop over pixels.
+    pub fn background_pixel(&self, v: ViewId, e: usize, bg: &SkinBitmap) -> impl Fn(f64, f64) -> (i32, i32) + use<> {
         let (w, h) = (f64::from(self.width(v, e)), f64::from(self.height(v, e)));
-        if self.background_stretched(v, e) && w > 0.0 && h > 0.0 {
-            return ((x * f64::from(bg.width) / w).floor() as i32, (y * f64::from(bg.height) / h).floor() as i32);
+        let (bw, bh) = (bg.width, bg.height);
+        let stretched = self.background_stretched(v, e) && w > 0.0 && h > 0.0;
+        let tiled = self.get_bool(v, e, "backgroundtiled") && bw > 0 && bh > 0;
+        move |x, y| {
+            if stretched {
+                return ((x * f64::from(bw) / w).floor() as i32, (y * f64::from(bh) / h).floor() as i32);
+            }
+            let (ix, iy) = (x.floor() as i32, y.floor() as i32);
+            if tiled { (ix.rem_euclid(bw as i32), iy.rem_euclid(bh as i32)) } else { (ix, iy) }
         }
-        let (ix, iy) = (x.floor() as i32, y.floor() as i32);
-        if self.get_bool(v, e, "backgroundtiled") && bg.width > 0 && bg.height > 0 {
-            return (ix.rem_euclid(bg.width as i32), iy.rem_euclid(bg.height as i32));
-        }
-        (ix, iy)
     }
 
     pub fn render_subview_image(&self, v: ViewId, e: usize, c: &mut Canvas, b: Rect, clip: Rect, cut_view: bool) {
@@ -1112,8 +1115,9 @@ impl Skin {
     fn mark_holes(&self, v: ViewId, e: usize, c: &mut Canvas, bg: &SkinBitmap, b: Rect, clip: Rect) {
         let key = parse_color(&self.get_str(v, e, "transparencycolor")).filter(|_| e != 0);
         let raw = key.and_then(|_| self.images.get_raw(&self.get_str(v, e, "backgroundimage")));
+        let at = self.background_pixel(v, e, bg);
         c.mark_holes(b.intersect(&clip), |x, y| {
-            let (ix, iy) = self.background_pixel(v, e, bg, x - b.x, y - b.y);
+            let (ix, iy) = at(x - b.x, y - b.y);
             match (key, &raw) {
                 (Some(k), Some(raw)) if raw.rgb(ix, iy).is_some_and(|rgb| images::matches_key(rgb, k)) => Backdrop::Open(k),
                 _ if bg.alpha(ix, iy) > 0 => Backdrop::Covered,

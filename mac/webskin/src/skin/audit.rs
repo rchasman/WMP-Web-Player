@@ -168,10 +168,11 @@ fn own_key<'a>(s: &'a Skin, v: ViewId, e: usize) -> Option<OwnKey<'a>> {
     match s.el(v, e).kind {
         Kind::Subview => {
             let raw = s.images.get_raw(&s.get_str(v, e, "backgroundimage"))?;
+            let at = s.background_pixel(v, e, &raw);
             Some((
                 k,
                 Box::new(move |x, y| {
-                    let (ix, iy) = s.background_pixel(v, e, &raw, x - b.x, y - b.y);
+                    let (ix, iy) = at(x - b.x, y - b.y);
                     raw.rgb(ix, iy).is_some_and(|p| matches_key(p, k))
                 }),
             ))
