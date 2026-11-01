@@ -118,7 +118,7 @@ public sealed class VideoSettingsElement : NonVisualElement
 /// <summary>POPUP: a script-built menu; show() pops it up and selectedItem reports the choice.</summary>
 public sealed class PopupElement : NonVisualElement
 {
-    readonly List<string> _items = new();
+    readonly List<string> _items;
     static readonly Dictionary<string, PType> S = new(StringComparer.OrdinalIgnoreCase)
     {
         ["selecteditem"] = PType.Int, ["backgroundcolor"] = PType.String, ["foregroundcolor"] = PType.String,
@@ -127,6 +127,7 @@ public sealed class PopupElement : NonVisualElement
 
     public PopupElement(SkinView view, WmsNode node) : base(view, node)
     {
+        _items = ListBoxElement.ItemLines(node);
         Method("appendItem", a => { _items.Add(ToStr(Arg(a, 0))); return (double)(_items.Count - 1); });
         Method("deleteItem", a => { int i = (int)ToNumber(Arg(a, 0)); if (i >= 0 && i < _items.Count) _items.RemoveAt(i); return null; });
         Method("deleteAll", _ => { _items.Clear(); return null; });

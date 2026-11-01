@@ -167,12 +167,15 @@ public sealed class SkinView : SubviewElement
             case "TEXT": case "STATUSTEXT": case "CURRENTPOSITIONTEXT": case "METADATATEXT": case "DURATIONTEXT": return new TextElement(this, n);
             case "EFFECTS": case "WMPEFFECTS": return new EffectsElement(this, n);
             case "VIDEO": case "WMPVIDEO": return new VideoElement(this, n);
-            case "PLAYLIST": case "ITEMSPLAYLIST": case "DROPDOWNPLAYLIST": case "LISTBOX": return new PlaylistElement(this, n);
+            case "PLAYLIST": case "ITEMSPLAYLIST": case "DROPDOWNPLAYLIST": return new PlaylistElement(this, n);
+            case "LISTBOX": return new ListBoxElement(this, n);
             case "EQUALIZERSETTINGS": return new EqualizerSettingsElement(this, n);
             case "VIDEOSETTINGS": return new VideoSettingsElement(this, n);
             case "POPUP": return new PopupElement(this, n);
             case "AUTOMENU": return new AutoMenuElement(this, n);
             case "VIEW": case "THEME": return null;
+            // A POPUP's or LISTBOX's lines, read by the element itself.
+            case "ITEM" when parent is PopupElement or ListBoxElement: return null;
         }
         if (parent is ButtonGroupElement && (t == "BUTTONELEMENT" || t.EndsWith("ELEMENT"))) return new GroupButtonElement(this, n);
         if (t == "BUTTON" || t.EndsWith("BUTTON")) return new ButtonElement(this, n);
