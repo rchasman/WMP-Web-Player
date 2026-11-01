@@ -42,7 +42,8 @@ pub struct State {
     pub scroll: f64,
     /// A POPUP's or LISTBOX's lines.
     pub items: Vec<String>,
-    pub playlist_top: usize,
+    /// A PLAYLIST's first row when scrolled; `None` keeps the newest track in view.
+    pub playlist_top: Option<usize>,
     /// EQUALIZERSETTINGS applying a preset (its gain changes don't switch to Custom), or EFFECTS
     /// reporting the visualization it switched to.
     pub applying: bool,
@@ -261,6 +262,8 @@ const PLAYLIST: &[(&str, PType)] = &[
     ("fontface", S),
     ("fontsize", N),
     ("dropdownvisible", B),
+    ("toolbarvisible", B),
+    ("playlistitemsvisible", B),
     ("selectedindex", I),
 ];
 const EQUALIZER: &[(&str, PType)] = &[
@@ -473,9 +476,11 @@ impl Skin {
             (Kind::Text, "scrollingamount") => 1.0.into(),
             (Kind::Text, "scrollingdirection") => "left".into(),
             (Kind::Video, "backgroundcolor") => "#000000".into(),
-            (Kind::Playlist, "backgroundcolor") => "#000000".into(),
-            (Kind::Playlist, "foregroundcolor") => "#C0C0C0".into(),
-            (Kind::Playlist, "itemplayingcolor") => "#FFFFFF".into(),
+            // As WMP drew a PLAYLIST on Windows 11 (measured on a GitHub runner).
+            (Kind::Playlist, "backgroundcolor") => "#FFFFFF".into(),
+            (Kind::Playlist, "foregroundcolor") => "#000000".into(),
+            (Kind::Playlist, "itemplayingcolor") => "#00FF00".into(),
+            (Kind::Playlist, "columnsvisible" | "dropdownvisible" | "playlistitemsvisible") => true.into(),
             (Kind::EqualizerSettings, "currentpreset") => ((EQ_PRESETS.len() - 1) as f64).into(),
             (Kind::EqualizerSettings, "enabled" | "enable") => false.into(),
             (Kind::EqualizerSettings, "splinetension" | "speakersize") => 1.0.into(),
@@ -789,6 +794,7 @@ impl Skin {
                 let (w, h) = self.text_measure(v, e);
                 (w.ceil() as i32 + 1, h.ceil() as i32)
             }
+            Kind::Playlist => (0, self.playlist_bar_height(v, e)),
             _ => (0, 0),
         }
     }
@@ -1368,53 +1374,6 @@ impl Skin {
         match self.el(v, e).state.vis.as_ref().and_then(|r| r.image.as_ref()) {
             Some(image) => c.draw_image(image, b, None, clip, 1.0),
             None => c.fill(b, 0, clip),
-        }
-    }
-
-    fn render_playlist(&self, v: ViewId, e: usize, c: &mut Canvas, b: Rect, clip: Rect) {
-        if b.w < 4.0 || b.h < 4.0 {
-            return;
-        }
-        let clip = clip.intersect(&b);
-        let color = |attr: &str, fallback: u32| parse_color(&self.get_str(v, e, attr)).unwrap_or(fallback);
-        if parse_color(&self.get_str(v, e, "backgroundcolor")).is_some() {
-            c.fill(b, color("backgroundcolor", 0), clip);
-        }
-        if let Some(bg) = self.img(v, e, "backgroundimage") {
-            c.draw_image(bg.source(), Rect::new(b.x, b.y, f64::from(bg.width), f64::from(bg.height)), None, clip, 1.0);
-        }
-        let face = self.get_str(v, e, "fontface");
-        let points = self.get_num(v, e, "fontsize").max(6.0);
-        let normal = TextStyle::new(&face, points, "normal");
-        let bold = TextStyle::new(&face, points, "bold");
-        let row_h = (f64::from(normal.px) * 1.45).ceil();
-        let (fg, playing) = (color("foregroundcolor", 0xC0C0C0), color("itemplayingcolor", 0xFF_FFFF));
-        let items = &self.history;
-        let rows = (b.h / row_h) as usize;
-        let top = self.el(v, e).state.playlist_top.min(items.len().saturating_sub(rows));
-        let mut y = b.y + 2.0;
-        for (i, it) in items.iter().enumerate().skip(top) {
-            if y >= b.bottom() {
-                break;
-            }
-            let current = i == items.len() - 1;
-            if current && let Some(hb) = parse_color(&self.get_str(v, e, "itemplayingbackgroundcolor")) {
-                c.fill(Rect::new(b.x, y - 1.0, b.w, row_h), hb, clip);
-            }
-            let (style, rgb) = if current { (&bold, playing) } else { (&normal, fg) };
-            let name = if it.artist.is_empty() { it.title.clone() } else { format!("{} - {}", it.title, it.artist) };
-            let label = text::ellipsize(&format!("{}. {name}", i + 1), style, (b.w - 52.0).max(1.0) as f32);
-            c.draw_text(&text::rasterize(&label, style, c.scale, None), b.x + 4.0, y, rgb, clip);
-            if it.duration > 0.0 {
-                let dur = crate::player::format_time(it.duration);
-                let dw = f64::from(text::measure(&dur, style, None).0);
-                c.draw_text(&text::rasterize(&dur, style, c.scale, None), b.right() - dw - 4.0, y, rgb, clip);
-            }
-            y += row_h;
-        }
-        if items.is_empty() {
-            let hint = text::ellipsize("Play something in Spotify, Music or your browser", &normal, (b.w - 8.0).max(1.0) as f32);
-            c.draw_text(&text::rasterize(&hint, &normal, c.scale, None), b.x + 4.0, b.y + 4.0, fg, clip);
         }
     }
 

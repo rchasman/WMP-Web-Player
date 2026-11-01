@@ -1175,11 +1175,7 @@ impl Skin {
                 let val = (self.get_num(v, e, "value") + delta.signum() * (max - min) / 20.0).clamp(min, max);
                 self.set_value(v, e, "value", val.into(), true);
             }
-            Kind::Playlist => {
-                let el = self.el_mut(v, e);
-                el.state.playlist_top = if delta > 0.0 { el.state.playlist_top.saturating_sub(1) } else { el.state.playlist_top + 1 };
-                self.view_mut(v).invalidate();
-            }
+            Kind::Playlist => self.scroll_playlist(v, e, delta),
             Kind::ListBox => {
                 let (_, row, inset) = self.listbox_layout(v, e);
                 let shown = ((f64::from(self.height(v, e)) - 2.0 * inset) / row).floor().max(1.0) as i32;

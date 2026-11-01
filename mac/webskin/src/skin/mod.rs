@@ -7,6 +7,7 @@
 pub mod audit;
 mod element;
 mod objects;
+mod playlist;
 mod view;
 mod visual;
 
