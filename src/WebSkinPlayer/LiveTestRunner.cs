@@ -115,6 +115,7 @@ public static class LiveTestRunner
                         string id = System.Text.RegularExpressions.Regex.Replace(view.Id ?? $"view{i}", "[^A-Za-z0-9_-]", "_");
                         string label = after == null ? id : $"{id}.{after}";
                         Save(Render(view), Path.Combine(outDir, $"{name}.{label}.png"));
+                        if (after == null) File.WriteAllText(Path.Combine(outDir, $"{name}.{label}.tree.txt"), Boxes(view));
                         view.HeldAt = DateTime.UtcNow;
                         try
                         {
@@ -223,6 +224,13 @@ public static class LiveTestRunner
         }
         return faults;
     }
+
+    /// <summary>Each named element's box in the window, one per line, to compare with WMP's own layout.</summary>
+    static string Boxes(SkinView view) => string.Concat(view.AllElements.Where(e => e.Id != null).Select(e =>
+    {
+        var b = e.AbsoluteBounds;
+        return $"<{e.Tag} id={e.Id}> abs=({b.X:0},{b.Y:0},{b.Width:0}x{b.Height:0}){(e.IsEffectivelyVisible ? "" : " HIDDEN")}\n";
+    }));
 
     static readonly string[] ClickHandlers = { "onclick", "onmousedown", "onmouseup", "ondblclick" };
 
