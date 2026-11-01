@@ -102,6 +102,9 @@ impl Element {
     }
 }
 
+/// The size WMP gave a button or button group with no picture.
+const PICTURELESS: (i32, i32) = (192, 192);
+
 pub fn kind_for(tag: &str, parent: Kind) -> Kind {
     match tag {
         "SUBVIEW" => Kind::Subview,
@@ -766,13 +769,12 @@ impl Skin {
                     (w.max(self.get_int(v, c, "left") + self.width(v, c)), h.max(self.get_int(v, c, "top") + self.height(v, c)))
                 })
             }),
-            Kind::Button => size(self.img(v, e, "image")).unwrap_or_default(),
-            Kind::ButtonGroup => size(self.raw_img(v, e, "mappingimage")).or_else(|| size(self.img(v, e, "image"))).unwrap_or_default(),
+            // With no picture (or a missing one) WMP made a button or group 192x192.
+            Kind::Button => size(self.img(v, e, "image")).unwrap_or(PICTURELESS),
+            Kind::ButtonGroup => size(self.raw_img(v, e, "mappingimage")).or_else(|| size(self.img(v, e, "image"))).unwrap_or(PICTURELESS),
             Kind::GroupButton => el.parent.map_or((0, 0), |p| (self.width(v, p), self.height(v, p))),
-            Kind::Slider => {
-                let (bg, th) = (size(self.img(v, e, "backgroundimage")).unwrap_or_default(), size(self.img(v, e, "thumbimage")).unwrap_or_default());
-                (bg.0.max(th.0), bg.1.max(th.1))
-            }
+            // Its track's size; a taller thumb is clipped to it.
+            Kind::Slider => size(self.img(v, e, "backgroundimage")).or_else(|| size(self.img(v, e, "thumbimage"))).unwrap_or_default(),
             Kind::CustomSlider => size(self.raw_img(v, e, "positionimage")).or_else(|| size(self.img(v, e, "image"))).unwrap_or_default(),
             Kind::Text => {
                 let (w, h) = self.text_measure(v, e);
@@ -1034,9 +1036,9 @@ impl Skin {
         let (tw, th) = (f64::from(t.width), f64::from(t.height));
         let c = self.slider_center(v, e, self.get_num(v, e, "value"));
         Some(if self.slider_vertical(v, e) {
-            Rect::new((w - tw) / 2.0, (c - th / 2.0).clamp(0.0, (h - th).max(0.0)), tw, th)
+            Rect::new(((w - tw) / 2.0).max(0.0), (c - th / 2.0).clamp(0.0, (h - th).max(0.0)), tw, th)
         } else {
-            Rect::new((c - tw / 2.0).clamp(0.0, (w - tw).max(0.0)), (h - th) / 2.0, tw, th)
+            Rect::new((c - tw / 2.0).clamp(0.0, (w - tw).max(0.0)), ((h - th) / 2.0).max(0.0), tw, th)
         })
     }
 

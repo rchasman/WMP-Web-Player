@@ -1327,6 +1327,33 @@ mod tests {
         assert_eq!(at(2.0), Some((7, 7, 10)), "the others show the background");
     }
 
+    /// Measured in WMP: a button with no picture is 192x192 and takes clicks across it (WWC's
+    /// shutter button, Plus! Space's boosters); a slider is its background's size, its thumb
+    /// centred across it but never above its top (anime, Crystalball, Primitive).
+    #[test]
+    fn pictureless_buttons_and_sliders_take_wmps_sizes() {
+        let dir = temp_dir("default-sizes");
+        image::RgbaImage::from_pixel(40, 6, image::Rgba([90, 90, 90, 255])).save(dir.join("track.png")).unwrap();
+        image::RgbaImage::from_pixel(4, 10, image::Rgba([200, 0, 0, 255])).save(dir.join("thumb.png")).unwrap();
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="300" height="300">
+                 <BUTTON id="bare" onClick="x = 1;"/>
+                 <SLIDER id="seek" left="200" top="250" backgroundImage="track.png" thumbImage="thumb.png"/>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        shared.read(|s| {
+            let id = |name: &str| s.view(v).by_id[name];
+            assert_eq!((s.width(v, id("bare")), s.height(v, id("bare"))), (192, 192));
+            assert_eq!(s.hit_test_point(v, 150.0, 150.0), Some(id("bare")), "it takes clicks across its box");
+            assert_eq!((s.width(v, id("seek")), s.height(v, id("seek"))), (40, 6), "the slider is its track's size");
+            assert_eq!(s.slider_thumb_rect(v, id("seek")).unwrap().y, 0.0, "a taller thumb hangs from the top");
+        });
+    }
+
     /// QuickSilver lays disabled buttons over its real ones as artwork.
     #[test]
     fn a_disabled_button_lets_clicks_reach_the_button_under_it() {
