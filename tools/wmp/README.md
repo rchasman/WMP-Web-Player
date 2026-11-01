@@ -48,7 +48,9 @@ rest in a new child process per skin.
 | `listbox` | a Windows list: rows 1.3 times the font's pixel size, 1 px #7A7A7A border, selection #0078D4 with white text; a click selects; ITEM children come first |
 | `child-zindex` | a child subview with a zIndex below its parent's draws behind the parent's picture; a child with no zIndex, or a button, stays above |
 | `gif-timing` | a frame shows for its delay rounded up to the 1/64 s timer tick, at least 3 ticks: 0-40 ms all show 47 ms |
-| `playlists` | the playlist control's header, rows and colours with songs in it |
+| `playlists` | a playlist stacks a 24 px combo naming the playlist, a 29 px toolbar, a 24 px header and 19 px rows; unset colours are white, black and green on a #222222 band that starts 4 px in |
+| `playlist-columns` | columns fit their header plus 16 px and the rows in view plus 12 px, in Segoe UI 9 pt; with no `columns` they are Title, Length, Artist, Genre; columns wider than the box get a 17 px scroll bar |
+| `playlist-widths` | column widths don't follow the box's width; `fontFace` and `fontSize` change nothing, the colours apply, and `itemPlayingBackgroundColor` replaces the band |
 
 Also measured with the `capture` and `layout` tasks: WMP shapes the window from the backgrounds,
 so anything a control draws over a background's hole is cut (xXx Night Vision's lime corners);

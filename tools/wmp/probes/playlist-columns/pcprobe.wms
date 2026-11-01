@@ -1,0 +1,6 @@
+<THEME id="pcprobe" title="pcprobe" author="test"><VIEW id="pcView" backgroundColor="#202020" width="660" height="440" titleBar="false" resizable="false">
+<PLAYLIST id="plA" left="10" top="10" width="300" height="150" columnsVisible="false" dropDownVisible="false" columns="name=Name;duration=Time" backgroundColor="#000000" foregroundColor="#FFFFFF" itemPlayingColor="#FFFF00" itemPlayingBackgroundColor="#004BB2"/>
+<PLAYLIST id="plB" left="340" top="10" width="160" height="150" columnsVisible="true" dropDownVisible="true" columns="name=Name;duration=Time"/>
+<PLAYLIST id="plC" left="10" top="200" width="300" height="200" columnsVisible="false" playlistItemsVisible="true"/>
+<PLAYLIST id="plD" left="340" top="200" width="300" height="200" columnsVisible="true" dropDownVisible="false" columns="name=Name;artist=Artist;album=Album;duration=Time;" fontSize="12"/>
+</VIEW></THEME>

@@ -1,0 +1,2 @@
+view=pwView
+songs=6

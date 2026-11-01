@@ -27,7 +27,7 @@ $name = $Probe; $o = "$Out\$name"; New-Item -ItemType Directory -Force $o | Out-
 $cfg = @{}; foreach ($line in Get-Content "$PSScriptRoot\probes\$name\probe.txt") { $k, $v = $line.Split('=', 2); $cfg[$k.Trim()] = $v.Trim() }
 if (-not (Show-Skin 6)) { 'no View Now'; Capture ([Windows.Forms.Screen]::PrimaryScreen.Bounds) "$o\screen.png"; exit }
 if ($cfg.songs) {
-    $files = foreach ($song in @('Glue', 'Opal', 'Atlas', 'Gym', 'Late night')[0..([int]$cfg.songs - 1)]) { $p = "$env:RUNNER_TEMP\$song.wav"; New-Tone $p 40; $p }
+    $files = foreach ($song in @('Glue', 'Opal', 'Atlas', 'Gym', 'Late night', 'A much longer song title for the list')[0..([int]$cfg.songs - 1)]) { $p = "$env:RUNNER_TEMP\$song.wav"; New-Tone $p 40; $p }
     ($files -join "`r`n") | Set-Content "$env:RUNNER_TEMP\$name.m3u"
     Start-Process $Exe -ArgumentList "`"$env:RUNNER_TEMP\$name.m3u`""
     Start-Sleep 10

@@ -1,0 +1,2 @@
+view=pcView
+songs=6

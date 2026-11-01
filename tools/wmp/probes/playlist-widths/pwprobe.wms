@@ -1,0 +1,10 @@
+<THEME id="pwprobe" title="pwprobe" author="test"><VIEW id="pwView" backgroundColor="#202020" width="1000" height="640" titleBar="false" resizable="false">
+<PLAYLIST id="w120" left="10" top="40" width="120" height="170" dropDownVisible="false" columns="name=Name;duration=Time"/>
+<PLAYLIST id="w200" left="140" top="40" width="200" height="170" dropDownVisible="false" columns="name=Name;duration=Time"/>
+<PLAYLIST id="w300" left="350" top="40" width="300" height="170" dropDownVisible="false" columns="name=Name;duration=Time"/>
+<PLAYLIST id="w400" left="10" top="230" width="400" height="170" dropDownVisible="false" columns="name=Name;duration=Time"/>
+<PLAYLIST id="w500" left="420" top="230" width="500" height="170" dropDownVisible="false" columns="name=Name;duration=Time"/>
+<PLAYLIST id="short" left="10" top="420" width="300" height="70" dropDownVisible="false" columns="name=Name;duration=Time"/>
+<PLAYLIST id="colors" left="330" top="420" width="300" height="170" dropDownVisible="false" columnsVisible="false" columns="name=Name;duration=Time" backgroundColor="#000000" foregroundColor="#FFFFFF" itemPlayingColor="#FFFF00" itemPlayingBackgroundColor="#004BB2" disabledItemColor="#FF0000"/>
+<PLAYLIST id="font" left="650" top="420" width="300" height="170" dropDownVisible="false" columns="name=Name;duration=Time" fontFace="Courier New" fontSize="14" foregroundColor="#0000FF"/>
+</VIEW></THEME>
