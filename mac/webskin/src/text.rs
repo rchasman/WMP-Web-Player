@@ -1,6 +1,7 @@
 //! Text for TEXT and PLAYLIST elements, laid out and drawn with the Mac's own fonts.
 //! Skins name Windows fonts; macOS ships Tahoma, Verdana, Arial and friends, and anything
-//! missing falls back to Tahoma, as WMP's font fallback did.
+//! missing falls back to Tahoma, as WMP's font fallback did. Segoe UI, the font of WMP's own
+//! lists, is not on macOS: Selawik, Microsoft's open font with its widths, stands in.
 
 use cosmic_text::{Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight, Wrap};
 use std::cell::RefCell;
@@ -16,7 +17,12 @@ thread_local! {
 fn with_fonts<T>(f: impl FnOnce(&mut FontSystem, &mut SwashCache, &mut HashMap<String, Option<String>>) -> T) -> T {
     FONTS.with(|cell| {
         let mut slot = cell.borrow_mut();
-        let (fs, cache, families) = slot.get_or_insert_with(|| (FontSystem::new(), SwashCache::new(), HashMap::new()));
+        let (fs, cache, families) = slot.get_or_insert_with(|| {
+            let mut fs = FontSystem::new();
+            fs.db_mut().load_font_data(include_bytes!("../fonts/selawik.ttf").to_vec());
+            fs.db_mut().load_font_data(include_bytes!("../fonts/selawik-bold.ttf").to_vec());
+            (fs, SwashCache::new(), HashMap::new())
+        });
         f(fs, cache, families)
     })
 }
@@ -64,7 +70,8 @@ fn resolve_family(fs: &mut FontSystem, families: &mut HashMap<String, Option<Str
     let find = |fs: &FontSystem, name: &str| {
         fs.db().faces().find_map(|f| f.families.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(n, _)| n.clone()))
     };
-    let hit = find(fs, face.trim()).or_else(|| find(fs, "Tahoma")).or_else(|| find(fs, "Verdana"));
+    let wanted = if key == "segoe ui" { "Selawik" } else { face.trim() };
+    let hit = find(fs, wanted).or_else(|| find(fs, "Tahoma")).or_else(|| find(fs, "Verdana"));
     families.insert(key, hit.clone());
     hit
 }
