@@ -56,8 +56,9 @@ public class SliderElement : SkinElement
         }
     }
 
-    public override int NaturalWidth => Math.Max(Background?.Width ?? 0, Img("thumbimage")?.Width ?? 0);
-    public override int NaturalHeight => Math.Max(Background?.Height ?? 0, Img("thumbimage")?.Height ?? 0);
+    // Its track's size, measured in WMP; a taller thumb is clipped to it.
+    public override int NaturalWidth => Background?.Width ?? Img("thumbimage")?.Width ?? 0;
+    public override int NaturalHeight => Background?.Height ?? Img("thumbimage")?.Height ?? 0;
 
     double Min => GetNumber("min");
     double Max => GetNumber("max");
@@ -95,10 +96,11 @@ public class SliderElement : SkinElement
         if (Vertical)
         {
             double y = Math.Clamp(c - t.Height / 2.0, 0, Math.Max(0, Height - t.Height));
-            return new Rect(bounds.X + (Width - t.Width) / 2.0, bounds.Y + y, t.Width, t.Height);
+            return new Rect(bounds.X + Math.Max(0, (Width - t.Width) / 2.0), bounds.Y + y, t.Width, t.Height);
         }
         double x = Math.Clamp(c - t.Width / 2.0, 0, Math.Max(0, Width - t.Width));
-        return new Rect(bounds.X + x, bounds.Y + (Height - t.Height) / 2.0, t.Width, t.Height);
+        // Centred across the track but never above its top: a taller thumb hangs from it (anime, Crystalball).
+        return new Rect(bounds.X + x, bounds.Y + Math.Max(0, (Height - t.Height) / 2.0), t.Width, t.Height);
     }
 
     public override void Render(DrawingContext dc, Rect b)

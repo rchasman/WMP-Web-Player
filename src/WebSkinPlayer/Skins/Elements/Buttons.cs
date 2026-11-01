@@ -6,6 +6,13 @@ using WebSkinPlayer.Skins.Scripting;
 namespace WebSkinPlayer.Skins.Elements;
 
 /// <summary>Built-in behaviour for the predefined buttons/elements (PLAYBUTTON, PAUSEELEMENT, ...).</summary>
+/// <summary>Sizes WMP gave elements without a picture.</summary>
+static class Pictureless
+{
+    /// <summary>A button or button group with no picture (or a missing one) was 192x192, measured in WMP.</summary>
+    public const int Size = 192;
+}
+
 public static class ButtonPresets
 {
     public sealed record Preset(string Action, string? Enabled, string ToolTip, bool Sticky = false, string? Down = null);
@@ -52,8 +59,8 @@ public class ButtonElement : SkinElement
     public ButtonElement(SkinView view, WmsNode node) : base(view, node) { }
 
     SkinBitmap? Image => Img("image");
-    public override int NaturalWidth => Image?.Width ?? 0;
-    public override int NaturalHeight => Image?.Height ?? 0;
+    public override int NaturalWidth => Image?.Width ?? Pictureless.Size;
+    public override int NaturalHeight => Image?.Height ?? Pictureless.Size;
     public override bool IsInteractive => true;
 
     public bool Down => GetBool("down");
@@ -115,8 +122,8 @@ public sealed class ButtonGroupElement : SkinElement
     public ButtonGroupElement(SkinView view, WmsNode node) : base(view, node) { }
 
     SkinBitmap? Mapping => Img("mappingimage", keyed: false);
-    public override int NaturalWidth => Mapping?.Width ?? Img("image")?.Width ?? 0;
-    public override int NaturalHeight => Mapping?.Height ?? Img("image")?.Height ?? 0;
+    public override int NaturalWidth => Mapping?.Width ?? Img("image")?.Width ?? Pictureless.Size;
+    public override int NaturalHeight => Mapping?.Height ?? Img("image")?.Height ?? Pictureless.Size;
     // Without showBackground the group image only appears inside each element's mapped area.
     protected override object? ElementDefault(string name) => name.Equals("showbackground", StringComparison.OrdinalIgnoreCase) ? false : null;
     public override bool IsInteractive => true;
