@@ -1376,6 +1376,36 @@ mod tests {
         });
     }
 
+    /// Measured in WMP: a child subview whose zIndex is below its parent's draws behind the
+    /// parent's picture, not only a negative one. XBOX's intro (zIndex 18 and 19) plays under its
+    /// screen cover (20), which hides the animation's square corners. A button stays on its
+    /// parent's picture (deepbluesomething's whole face is a zIndex 1 button in a zIndex 8 mask).
+    #[test]
+    fn a_child_below_its_parents_zindex_draws_behind_it() {
+        let dir = temp_dir("child-zindex");
+        image::RgbaImage::from_pixel(20, 20, image::Rgba([200, 0, 0, 255])).save(dir.join("cover.png")).unwrap();
+        image::RgbaImage::from_pixel(5, 5, image::Rgba([0, 200, 0, 255])).save(dir.join("green.png")).unwrap();
+        image::RgbaImage::from_pixel(5, 5, image::Rgba([0, 0, 220, 255])).save(dir.join("blue.png")).unwrap();
+        std::fs::write(
+            dir.join("t.wms"),
+            r##"<THEME><VIEW id="Main" width="20" height="20">
+                 <SUBVIEW id="cover" zIndex="20" backgroundImage="cover.png">
+                   <SUBVIEW id="below" zIndex="19" backgroundImage="green.png"/>
+                   <SUBVIEW id="above" left="10" zIndex="21" backgroundImage="blue.png"/>
+                   <BUTTON id="face" top="10" zIndex="1" image="green.png"/>
+                 </SUBVIEW>
+               </VIEW></THEME>"##,
+        )
+        .unwrap();
+        let shared = Shared::load(&dir.join("t.wms"), Box::new(crate::player::NoMedia), Settings::scratch(), Rc::new(NullHost), false).unwrap();
+        let v = shared.load_main_view_offscreen();
+        let pm = shared.read(|s| s.render_view(v, 1.0)).unwrap().pixmap;
+        let at = |x: u32| pm.pixel(x, 2).map(|p| (p.red(), p.green(), p.blue()));
+        assert_eq!(at(2), Some((200, 0, 0)), "zIndex 19 under a parent at 20 is hidden by its picture");
+        assert_eq!(at(12), Some((0, 0, 220)), "zIndex 21 draws over it");
+        assert_eq!(pm.pixel(2, 12).map(|p| (p.red(), p.green(), p.blue())), Some((0, 200, 0)), "a lower button stays on the picture");
+    }
+
     /// QuickSilver lays disabled buttons over its real ones as artwork.
     #[test]
     fn a_disabled_button_lets_clicks_reach_the_button_under_it() {

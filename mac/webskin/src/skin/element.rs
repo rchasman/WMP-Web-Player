@@ -685,14 +685,21 @@ impl Skin {
         c
     }
 
-    /// Children drawn under a container's background image (negative zIndex, seen through its
-    /// holes as in Goo, Creed and Radio), then those drawn after. They lie over its colour.
+    /// Children drawn under a container's background image, then those drawn after. As measured
+    /// in WMP, a child goes under when it sets a zIndex below the container's: negative ones under
+    /// a view show through its holes (Goo, Creed, Radio), and XBOX's intro (18, 19) plays under its
+    /// screen cover (20). One that sets none stays above (WWC's text in its zIndex 8 panel). They
+    /// lie over its colour.
     pub fn children_behind_and_above(&self, v: ViewId, e: usize) -> (Vec<usize>, Vec<usize>) {
         if self.el(v, e).kind == Kind::ButtonGroup {
             return (vec![], vec![]);
         }
         let behind_allowed = self.clips_children(v, e);
-        self.children_in_draw_order(v, e).into_iter().partition(|&c| behind_allowed && self.get_int(v, c, "zindex") < 0)
+        let own = self.get_int(v, e, "zindex");
+        self.children_in_draw_order(v, e).into_iter().partition(|&c| {
+            let z = self.get_int(v, c, "zindex");
+            behind_allowed && (z < 0 || (self.el(v, c).kind == Kind::Subview && self.has_value(v, c, "zindex") && z < own))
+        })
     }
 
     pub fn clips_children(&self, v: ViewId, e: usize) -> bool {
