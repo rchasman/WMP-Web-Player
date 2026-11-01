@@ -1,0 +1,5 @@
+<THEME id="lbprobe" title="lbprobe" author="test"><VIEW id="lbView" backgroundColor="#202020" width="400" height="160" titleBar="false" resizable="false" scriptFile="lb.js" onload="fill();">
+<LISTBOX id="lb1" left="10" top="10" width="150" height="100" backgroundColor="#07070A" foregroundColor="#F59D05" border="false" popUp="false" fontFace="Arial" fontSize="8" selectedItem_onChange="mark.visible=false;"/>
+<LISTBOX id="lb2" left="200" top="10" width="150" height="100"><ITEM value="From markup"/></LISTBOX>
+<SUBVIEW id="mark" left="10" top="120" width="30" height="30" backgroundColor="#00FF00"/>
+</VIEW></THEME>

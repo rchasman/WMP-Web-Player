@@ -1,0 +1,73 @@
+# Real Windows Media Player as the answer key for the skin engines. Manual only: run it from the
+# Actions tab when a rule needs measuring. See tools/wmp/README.md.
+name: WMP
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: probes (test skins), layout (every element's box) or capture (screenshots)
+        type: choice
+        options: [probes, layout, capture]
+        default: probes
+      only:
+        description: probes to run, comma separated (empty runs all)
+        required: false
+        default: ''
+
+jobs:
+  probes:
+    if: inputs.task == 'probes'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Skip WMP's first-run wizard
+        shell: pwsh
+        run: |
+          New-Item -Force HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer | Out-Null
+          Set-ItemProperty HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer GroupPrivacyAcceptance 1 -Type DWord
+          New-Item -Force HKCU:\Software\Microsoft\MediaPlayer\Preferences | Out-Null
+          Set-ItemProperty HKCU:\Software\Microsoft\MediaPlayer\Preferences AcceptedPrivacyStatement 1 -Type DWord
+          Set-ItemProperty HKCU:\Software\Microsoft\MediaPlayer\Preferences FirstRun 0 -Type DWord
+      - name: Run the probes
+        shell: pwsh
+        run: tools\wmp\probe.ps1 -Out "$env:RUNNER_TEMP\wmp" -Only "${{ inputs.only }}"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: wmp-probes
+          path: ${{ runner.temp }}/wmp
+
+  corpus:
+    if: inputs.task != 'probes'
+    runs-on: windows-2025
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Skip WMP's first-run wizard
+        shell: pwsh
+        run: |
+          New-Item -Force HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer | Out-Null
+          Set-ItemProperty HKLM:\SOFTWARE\Policies\Microsoft\WindowsMediaPlayer GroupPrivacyAcceptance 1 -Type DWord
+          New-Item -Force HKCU:\Software\Microsoft\MediaPlayer\Preferences | Out-Null
+          Set-ItemProperty HKCU:\Software\Microsoft\MediaPlayer\Preferences AcceptedPrivacyStatement 1 -Type DWord
+          Set-ItemProperty HKCU:\Software\Microsoft\MediaPlayer\Preferences FirstRun 0 -Type DWord
+      - name: Download the archive.org skin collection
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory skins | Out-Null
+          $meta = Invoke-RestMethod https://archive.org/metadata/windowsmediaplayerskinscollection
+          foreach ($n in ($meta.files | Where-Object { $_.name -like '*.wmz' }).name) {
+            curl.exe -sSL --retry 5 --retry-all-errors -o (Join-Path skins $n) ("https://archive.org/download/windowsmediaplayerskinscollection/" + [Uri]::EscapeDataString($n))
+          }
+      - name: Run every skin
+        shell: pwsh
+        run: tools\wmp\${{ inputs.task }}.ps1 -Skins skins -Out "$env:RUNNER_TEMP\wmp" -Shard ${{ matrix.shard }} -Shards 6
+      - uses: actions/upload-artifact@v5
+        with:
+          name: wmp-${{ inputs.task }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/wmp

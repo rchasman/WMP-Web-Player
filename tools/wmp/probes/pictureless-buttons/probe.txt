@@ -1,0 +1,2 @@
+view=defView
+clicks=c1:yc1,na@150;150:xa,nb@150;150:xb

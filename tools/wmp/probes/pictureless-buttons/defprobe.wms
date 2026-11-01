@@ -1,0 +1,8 @@
+<THEME id="defprobe" title="defprobe" author="test"><VIEW id="defView" backgroundColor="#202020" width="640" height="240" titleBar="false" resizable="false">
+<BUTTON id="na" left="10" top="10" onclick="jscript:xa.visible=false;"/>
+<BUTTON id="nb" left="220" top="10" image="missing.png" onclick="jscript:xb.visible=false;"/>
+<BUTTON id="c1" left="450" top="10" image="red.bmp" onclick="jscript:yc1.visible=false;"/>
+<SUBVIEW id="xa" left="10" top="210" width="20" height="20" backgroundColor="#00FF00"/>
+<SUBVIEW id="xb" left="220" top="210" width="20" height="20" backgroundColor="#00FF00"/>
+<SUBVIEW id="yc1" left="450" top="210" width="20" height="20" backgroundColor="#00FF00"/>
+</VIEW></THEME>

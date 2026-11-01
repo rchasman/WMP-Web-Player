@@ -1,0 +1,6 @@
+<THEME id="plprobe" title="plprobe" author="test"><VIEW id="plView" backgroundColor="#202020" width="660" height="440" titleBar="false" resizable="false">
+<PLAYLIST id="pl1" left="10" top="10" width="300" height="200"/>
+<PLAYLIST id="pl2" left="340" top="10" width="300" height="200" dropDownVisible="true" backgroundColor="#000000" foregroundColor="#C0C0C0" itemPlayingColor="#FFFFFF"/>
+<PLAYLIST id="pl3" left="10" top="240" width="172" zindex="1" backgroundcolor="black" foregroundcolor="white" columnsVisible="false" columns="name=Name;Duration=Time" playlistItemsVisible="false"/>
+<PLAYLIST id="pl4" left="340" top="240" width="103" height="152" backgroundcolor="black" foregroundcolor="white" columnsVisible="false" columns="name=Name" editbuttonsvisible="false" movebuttonsvisible="false" toolbarVisible="true" playlistItemsVisible="true" toolbarMargin="0"/>
+</VIEW></THEME>

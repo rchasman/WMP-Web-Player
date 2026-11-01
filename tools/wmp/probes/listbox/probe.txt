@@ -1,0 +1,2 @@
+view=lbView
+clicks=lb1@40;40:*

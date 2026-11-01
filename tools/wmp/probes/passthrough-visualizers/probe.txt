@@ -1,0 +1,2 @@
+view=fxView
+clicks=c1:yc1,bh:xh,bi:xi,bj:xj,gk:xk,c2:yc2

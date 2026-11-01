@@ -1,0 +1,2 @@
+view=plView
+songs=3
