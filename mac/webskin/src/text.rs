@@ -112,11 +112,6 @@ pub fn measure(text: &str, style: &TextStyle, wrap: Option<f32>) -> (f32, f32) {
 
 /// The longest prefix of `text` plus "…" that fits in `width`.
 pub fn ellipsize(text: &str, style: &TextStyle, width: f32) -> String {
-    ellipsize_with(text, style, width, "…")
-}
-
-/// The longest prefix of `text` plus `mark` that fits in `width`.
-pub fn ellipsize_with(text: &str, style: &TextStyle, width: f32, mark: &str) -> String {
     if measure(text, style, None).0 <= width {
         return text.to_string();
     }
@@ -124,10 +119,10 @@ pub fn ellipsize_with(text: &str, style: &TextStyle, width: f32, mark: &str) -> 
     let (mut lo, mut hi) = (0usize, chars.len());
     while lo < hi {
         let mid = (lo + hi).div_ceil(2);
-        let candidate: String = chars[..mid].iter().collect::<String>() + mark;
+        let candidate: String = chars[..mid].iter().collect::<String>() + "…";
         if measure(&candidate, style, None).0 <= width { lo = mid } else { hi = mid - 1 }
     }
-    chars[..lo].iter().collect::<String>() + mark
+    chars[..lo].iter().collect::<String>() + "…"
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

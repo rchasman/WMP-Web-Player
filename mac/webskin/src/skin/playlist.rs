@@ -1,6 +1,7 @@
 //! PLAYLIST: WMP drew it as Windows controls, a combo box naming the playlist over a details
 //! list in Segoe UI 9 pt, whatever the skin's font. The sizes and colours here were measured on
-//! real WMP on a GitHub runner (tools/wmp/probes/playlists and playlist-columns).
+//! real WMP on a GitHub runner (tools/wmp/probes/playlists, playlist-columns and
+//! playlist-headers).
 
 use super::{Skin, TrackInfo, ViewId};
 use crate::images::parse_color;
@@ -13,10 +14,8 @@ const TOOLBAR: f64 = 29.0;
 const HEADER: f64 = 24.0;
 const ROW: f64 = 19.0;
 const SCROLLBAR: f64 = 17.0;
-/// The space a list cell keeps around its text, a header label's wider margin, and the playing
-/// band's left gap.
+/// Where a cell's text starts, and the playing band's left gap.
 const PAD: f64 = 6.0;
-const HEADER_PAD: f64 = 8.0;
 const BAND_INSET: f64 = 4.0;
 /// WMP's columns when a skin names none.
 const DEFAULT_COLUMNS: &str = "name=Title;duration=Length;artist=Artist;genre=Genre";
@@ -29,6 +28,54 @@ pub struct Column {
     pub field: String,
     pub label: String,
     pub width: f64,
+    /// The room a column keeps beside its header label and beside its cells.
+    header_pad: f64,
+    cell_pad: f64,
+}
+
+/// WMP's margins depend on the column's place: (header, cell, narrowest width).
+fn margins(index: usize, count: usize) -> (f64, f64, f64) {
+    match index {
+        _ if count == 1 => (15.0, 8.0, 30.0),
+        0 => (16.0, 12.0, 34.0),
+        i if i + 1 == count => (15.0, 12.0, 25.0),
+        _ => (12.0, 12.0, 25.0),
+    }
+}
+
+/// A string's width as GDI lays out Segoe UI 9 pt: whole-pixel letter widths, no kerning. WMP
+/// sized its columns by this, and the font's design widths drift from it by up to a pixel a
+/// letter. Letters outside the table fall back to the drawing font.
+fn gdi_width(s: &str) -> f64 {
+    let fallback = |ch: char| f64::from(text::measure(ch.encode_utf8(&mut [0; 4]), &list_style(), None).0);
+    s.chars()
+        .map(|ch| {
+            let code = ch as usize;
+            let known = match code {
+                32..=0x24F => Some(LATIN[code - 32]),
+                0x2000..=0x206F => Some(PUNCTUATION[code - 0x2000]),
+                _ => None,
+            };
+            known.map_or_else(|| fallback(ch), f64::from)
+        })
+        .sum()
+}
+
+/// GDI's end ellipsis: the longest start of `s` that fits `room` with "..." after it.
+fn end_ellipsis(s: &str, room: f64) -> String {
+    if gdi_width(s) <= room {
+        return s.to_string();
+    }
+    let mut kept = String::new();
+    for ch in s.chars() {
+        let mut longer = kept.clone();
+        longer.push(ch);
+        if gdi_width(&longer) + gdi_width("...") > room {
+            break;
+        }
+        kept = longer;
+    }
+    kept + "..."
 }
 
 /// Where a PLAYLIST's parts sit inside its box, top to bottom.
@@ -101,20 +148,20 @@ impl Skin {
         };
         let (first, _) = window(rows.h);
         let fits = (rows.h / ROW).floor() as usize;
-        let style = list_style();
-        let measure = |s: &str| f64::from(text::measure(s, &style, None).0);
         let spec = self.get_str(v, e, "columns");
         let spec = if spec.trim().is_empty() { DEFAULT_COLUMNS.to_string() } else { spec };
         // A Windows list sizes each column to its header and the rows in view.
-        let columns: Vec<Column> = spec
-            .split(';')
-            .filter_map(|part| part.split_once('='))
-            .map(|(field, label)| {
+        let parts: Vec<(&str, &str)> = spec.split(';').filter_map(|part| part.split_once('=')).collect();
+        let columns: Vec<Column> = parts
+            .iter()
+            .enumerate()
+            .map(|(i, (field, label))| {
                 let field = field.trim().to_lowercase();
                 let label = label.trim().to_string();
-                let cells = items.iter().skip(first).take(fits).map(|t| measure(&cell(t, &field)) + 2.0 * PAD);
-                let width = cells.fold(measure(&label) + 2.0 * HEADER_PAD, f64::max).round();
-                Column { field, label, width }
+                let (header_pad, cell_pad, narrowest) = margins(i, parts.len());
+                let cells = items.iter().skip(first).take(fits).map(|t| gdi_width(&cell(t, &field)) + cell_pad);
+                let width = cells.fold((gdi_width(&label) + header_pad).max(narrowest), f64::max);
+                Column { field, label, width, header_pad, cell_pad }
             })
             .collect();
 
@@ -168,8 +215,8 @@ impl Skin {
             let mut x = h.x;
             for col in &layout.columns {
                 let cellr = Rect::new(x, h.y, col.width, h.h).intersect(&hclip);
-                let label = text::ellipsize_with(&col.label, &style, text_room(col.width), "...");
-                draw(c, &label, text_x(&col.field, &label, x, col.width, &style), h.y + 4.0, 0, cellr);
+                let label = end_ellipsis(&col.label, col.width - col.header_pad);
+                draw(c, &label, text_x(&col.field, &label, x, col.width), h.y + 4.0, 0, cellr);
                 c.fill(Rect::new(x + col.width - 1.0, h.y, 1.0, h.h), 0xE5_E5E5, hclip);
                 x += col.width;
             }
@@ -194,9 +241,9 @@ impl Skin {
             for col in &layout.columns {
                 let s = cell(track, &col.field);
                 if !s.is_empty() {
-                    let s = text::ellipsize_with(&s, &style, text_room(col.width), "...");
+                    let s = end_ellipsis(&s, col.width - col.cell_pad);
                     let cellr = Rect::new(x, y, col.width, ROW).intersect(&rclip);
-                    draw(c, &s, text_x(&col.field, &s, x, col.width, &style), y + 2.0, if current { playing } else { fg }, cellr);
+                    draw(c, &s, text_x(&col.field, &s, x, col.width), y + 2.0, if current { playing } else { fg }, cellr);
                 }
                 x += col.width;
             }
@@ -218,14 +265,8 @@ impl Skin {
     }
 }
 
-/// The width a cell's text may take before it ends in "...". The column was rounded from the
-/// same measure, so allow that rounding.
-fn text_room(width: f64) -> f32 {
-    (width - 2.0 * PAD + 0.5).max(1.0) as f32
-}
-
-fn text_x(field: &str, s: &str, x: f64, width: f64, style: &TextStyle) -> f64 {
-    if right_aligned(field) { x + width - PAD - f64::from(text::measure(s, style, None).0) } else { x + PAD }
+fn text_x(field: &str, s: &str, x: f64, width: f64) -> f64 {
+    if right_aligned(field) { x + width - PAD - gdi_width(s) } else { x + PAD }
 }
 
 type DrawText<'a> = dyn Fn(&mut Canvas, &str, f64, f64, u32, Rect) + 'a;
@@ -288,6 +329,35 @@ fn draw_scrollbar(c: &mut Canvas, r: Rect, clip: Rect, vertical: bool, at: f64, 
     let thumb = if vertical { Rect::new(r.x + 7.0, r.y + start, 2.0, len) } else { Rect::new(r.x + start, r.y + 7.0, len, 2.0) };
     c.fill(thumb, 0x85_8585, clip);
 }
+
+/// GDI's letter widths for Segoe UI 9 pt (12 px), read with GetCharWidth32 on Windows: U+0020 to
+/// U+024F, and U+2000 to U+206F.
+const LATIN: [u8; 560] = [
+    3, 3, 5, 7, 6, 10, 10, 3, 4, 4, 5, 8, 3, 5, 3, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 3, 3, 8, 8, 8, 5,
+    11, 8, 7, 8, 8, 6, 6, 8, 9, 3, 4, 7, 6, 11, 9, 9, 7, 9, 7, 6, 7, 8, 7, 11, 7, 7, 7, 4, 5, 4, 8, 5,
+    3, 6, 7, 6, 7, 6, 4, 7, 7, 3, 3, 6, 3, 11, 7, 7, 7, 7, 4, 5, 4, 7, 6, 9, 5, 6, 5, 4, 3, 4, 8, 4,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    3, 3, 6, 6, 7, 6, 3, 5, 5, 11, 5, 6, 8, 5, 11, 5, 5, 8, 4, 4, 3, 7, 6, 3, 2, 4, 5, 6, 11, 11, 11, 5,
+    8, 8, 8, 8, 8, 8, 10, 8, 6, 6, 6, 6, 3, 3, 3, 3, 8, 9, 9, 9, 9, 9, 9, 8, 9, 8, 8, 8, 8, 7, 7, 7,
+    6, 6, 6, 6, 6, 6, 10, 6, 6, 6, 6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 7, 7, 7, 8, 7, 7, 7, 7, 7, 6, 7, 6,
+    8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 6, 8, 8, 8, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 8, 7, 8, 7,
+    8, 7, 8, 7, 9, 7, 9, 7, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 7, 6, 4, 3, 7, 6, 6, 6, 3, 6, 3, 6, 4, 6,
+    4, 6, 3, 9, 7, 9, 7, 9, 7, 7, 9, 7, 9, 7, 9, 7, 9, 7, 11, 11, 7, 4, 7, 4, 7, 4, 6, 5, 6, 5, 6, 5,
+    6, 5, 7, 4, 7, 5, 7, 4, 8, 7, 8, 7, 8, 7, 8, 7, 8, 7, 8, 7, 11, 9, 7, 6, 7, 7, 5, 7, 5, 7, 5, 3,
+    7, 7, 7, 7, 7, 7, 7, 7, 6, 8, 9, 7, 7, 7, 6, 9, 7, 6, 6, 8, 7, 10, 3, 3, 7, 6, 3, 6, 11, 9, 7, 9,
+    9, 7, 12, 9, 7, 7, 7, 6, 5, 6, 4, 4, 6, 4, 6, 8, 7, 9, 9, 7, 6, 7, 5, 7, 7, 5, 5, 6, 6, 5, 5, 7,
+    3, 5, 5, 3, 15, 14, 12, 10, 9, 6, 13, 12, 10, 8, 6, 3, 3, 9, 7, 8, 7, 8, 7, 8, 7, 8, 7, 8, 7, 6, 8, 6,
+    8, 6, 10, 10, 8, 7, 8, 7, 7, 6, 9, 7, 9, 7, 7, 5, 3, 15, 14, 12, 8, 7, 12, 8, 9, 7, 8, 6, 10, 10, 9, 7,
+    8, 6, 8, 6, 6, 6, 6, 6, 3, 3, 3, 3, 9, 7, 9, 7, 7, 4, 7, 4, 8, 7, 8, 7, 6, 5, 7, 4, 6, 5, 9, 7,
+    9, 8, 7, 7, 7, 5, 8, 6, 6, 6, 9, 7, 9, 7, 9, 7, 9, 7, 7, 6, 4, 8, 4, 3, 11, 11, 8, 8, 6, 6, 7, 5,
+    5, 6, 4, 7, 8, 8, 6, 6, 4, 3, 9, 7, 7, 4, 7, 6,
+];
+const PUNCTUATION: [u8; 112] = [
+    6, 12, 6, 12, 4, 3, 2, 6, 3, 2, 2, 0, 0, 0, 0, 0, 5, 5, 6, 6, 12, 12, 6, 5, 3, 3, 3, 3, 5, 5, 5, 5,
+    5, 5, 5, 5, 3, 5, 9, 3, 0, 0, 0, 0, 0, 0, 0, 2, 15, 18, 3, 5, 6, 3, 5, 5, 4, 4, 4, 10, 6, 5, 5, 8,
+    8, 4, 10, 4, 2, 4, 4, 9, 8, 8, 5, 5, 5, 5, 5, 3, 8, 5, 7, 7, 8, 5, 6, 6, 8, 8, 4, 11, 8, 4, 3, 3,
+    6, 10, 10, 10, 10, 8, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11,
+];
 
 #[cfg(test)]
 mod tests {
@@ -356,12 +426,36 @@ mod tests {
     }
 
     #[test]
-    fn columns_fit_their_header_and_the_rows_in_view() {
-        let (shared, v, e) = playlist("widths", r#"columns="name=Name;duration=Time""#, &["Glue", "Opal"]);
-        let widths: Vec<f64> = layout(&shared, v, e).columns.iter().map(|c| c.width).collect();
-        assert_eq!(widths, [48.0, 42.0], "as WMP sized Name and Time over short titles");
-        let (shared, v, e) = playlist("wide", r#"columns="name=Name;duration=Time""#, &["Glue", "Late night"]);
-        assert_eq!(layout(&shared, v, e).columns[0].width, 65.0, "as WMP sized Name over Late night");
+    fn columns_match_wmps_measured_widths() {
+        let songs = ["Glue", "Opal", "Atlas", "Gym", "Late night"];
+        let measured: [(&str, &[f64]); 21] = [
+            ("name=N", &[61.0]),
+            ("name=Mmmmmmmmmm", &[125.0]),
+            ("duration=T", &[30.0]),
+            ("artist=A", &[30.0]),
+            ("album=Abcd", &[43.0]),
+            ("name=N;genre=G", &[65.0, 25.0]),
+            ("genre=G;name=N", &[34.0, 65.0]),
+            ("duration=T;name=N", &[34.0, 65.0]),
+            ("genre=G;artist=Mmmmmmmmmm", &[34.0, 125.0]),
+            ("genre=G;name=N;artist=A;album=B", &[34.0, 65.0, 25.0, 25.0]),
+            ("name=N;duration=T;genre=G", &[65.0, 33.0, 25.0]),
+            ("duration=T;genre=G;artist=A", &[34.0, 25.0, 25.0]),
+            ("genre=G;duration=T;artist=A", &[34.0, 33.0, 25.0]),
+            ("genre=G;artist=A;duration=T", &[34.0, 25.0, 33.0]),
+            ("genre=Mmmmmmmmmm;name=N;artist=A", &[126.0, 65.0, 25.0]),
+            ("genre=Ab;album=Ab;artist=Ab", &[34.0, 27.0, 30.0]),
+            ("genre=Time;album=Time;artist=Time", &[43.0, 39.0, 42.0]),
+            ("genre=Length;album=Length;artist=Length", &[53.0, 49.0, 52.0]),
+            ("genre=Composer;album=Composer;artist=Composer", &[71.0, 67.0, 70.0]),
+            ("genre=1234567890;genre=G", &[76.0, 25.0]),
+            ("name=Name;duration=Time", &[65.0, 42.0]),
+        ];
+        for (i, (columns, widths)) in measured.into_iter().enumerate() {
+            let (shared, v, e) = playlist(&format!("widths{i}"), &format!(r#"columns="{columns}""#), &songs);
+            let got: Vec<f64> = layout(&shared, v, e).columns.iter().map(|c| c.width).collect();
+            assert_eq!(got, widths, "{columns}");
+        }
     }
 
     #[test]
