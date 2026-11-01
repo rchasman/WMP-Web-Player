@@ -1,0 +1,14 @@
+<THEME id="pc2probe" title="pc2probe" author="test"><VIEW id="pc2View" backgroundColor="#202020" width="1000" height="660" titleBar="false" resizable="false">
+<PLAYLIST id="h0" left="10" top="40" width="315" height="130" dropDownVisible="false" columns="name=N;genre=G;artist=A"/>
+<PLAYLIST id="h1" left="335" top="40" width="315" height="130" dropDownVisible="false" columns="genre=G;name=N;artist=A"/>
+<PLAYLIST id="h2" left="660" top="40" width="315" height="130" dropDownVisible="false" columns="genre=G;artist=A;name=N"/>
+<PLAYLIST id="h3" left="10" top="190" width="315" height="130" dropDownVisible="false" columns="duration=T;genre=G;artist=A"/>
+<PLAYLIST id="h4" left="335" top="190" width="315" height="130" dropDownVisible="false" columns="genre=G;duration=T;artist=A"/>
+<PLAYLIST id="h5" left="660" top="190" width="315" height="130" dropDownVisible="false" columns="genre=G;artist=A;duration=T"/>
+<PLAYLIST id="h6" left="10" top="340" width="315" height="130" dropDownVisible="false" columns="name=N;duration=T"/>
+<PLAYLIST id="h7" left="335" top="340" width="315" height="130" dropDownVisible="false" columns="duration=T;name=N"/>
+<PLAYLIST id="h8" left="660" top="340" width="315" height="130" dropDownVisible="false" columns="name=N"/>
+<PLAYLIST id="h9" left="10" top="490" width="315" height="130" dropDownVisible="false" columns="genre=Mmmmmmmmmm;name=N;artist=A"/>
+<PLAYLIST id="h10" left="335" top="490" width="315" height="130" dropDownVisible="false" columns="genre=G;album=Abcd"/>
+<PLAYLIST id="h11" left="660" top="490" width="315" height="130" dropDownVisible="false" columns="album=Abcd"/>
+</VIEW></THEME>

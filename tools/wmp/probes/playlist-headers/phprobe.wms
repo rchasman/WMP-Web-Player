@@ -1,0 +1,18 @@
+<THEME id="phprobe" title="phprobe" author="test"><VIEW id="phView" backgroundColor="#202020" width="1000" height="660" titleBar="false" resizable="false">
+<PLAYLIST id="h0" left="10" top="40" width="235" height="130" dropDownVisible="false" columns="genre=I;album=I;artist=I"/>
+<PLAYLIST id="h1" left="255" top="40" width="235" height="130" dropDownVisible="false" columns="genre=Ab;album=Ab;artist=Ab"/>
+<PLAYLIST id="h2" left="500" top="40" width="235" height="130" dropDownVisible="false" columns="genre=G;album=G;artist=G"/>
+<PLAYLIST id="h3" left="745" top="40" width="235" height="130" dropDownVisible="false" columns="genre=Wx;album=Wx;artist=Wx"/>
+<PLAYLIST id="h4" left="10" top="190" width="235" height="130" dropDownVisible="false" columns="genre=Abc;album=Abc;artist=Abc"/>
+<PLAYLIST id="h5" left="255" top="190" width="235" height="130" dropDownVisible="false" columns="genre=Abcd;album=Abcd;artist=Abcd"/>
+<PLAYLIST id="h6" left="500" top="190" width="235" height="130" dropDownVisible="false" columns="genre=Abcde;album=Abcde;artist=Abcde"/>
+<PLAYLIST id="h7" left="745" top="190" width="235" height="130" dropDownVisible="false" columns="genre=Time;album=Time;artist=Time"/>
+<PLAYLIST id="h8" left="10" top="340" width="235" height="130" dropDownVisible="false" columns="genre=Length;album=Length;artist=Length"/>
+<PLAYLIST id="h9" left="255" top="340" width="235" height="130" dropDownVisible="false" columns="genre=Artist;album=Artist;artist=Artist"/>
+<PLAYLIST id="h10" left="500" top="340" width="235" height="130" dropDownVisible="false" columns="genre=Genre;album=Genre;artist=Genre"/>
+<PLAYLIST id="h11" left="745" top="340" width="235" height="130" dropDownVisible="false" columns="genre=Album;album=Album;artist=Album"/>
+<PLAYLIST id="h12" left="10" top="490" width="235" height="130" dropDownVisible="false" columns="genre=Composer;album=Composer;artist=Composer"/>
+<PLAYLIST id="h13" left="255" top="490" width="235" height="130" dropDownVisible="false" columns="genre=Mmmmmmmmmm;album=Mmmmmmmmmm;artist=Mmmmmmmmmm"/>
+<PLAYLIST id="h14" left="500" top="490" width="235" height="130" dropDownVisible="false" columns="genre=Title;album=Title;artist=Title"/>
+<PLAYLIST id="h15" left="745" top="490" width="235" height="130" dropDownVisible="false" columns="genre=Name;album=Name;artist=Name"/>
+</VIEW></THEME>

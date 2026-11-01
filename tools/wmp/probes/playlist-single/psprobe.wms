@@ -1,0 +1,14 @@
+<THEME id="psprobe" title="psprobe" author="test"><VIEW id="psView" backgroundColor="#202020" width="1000" height="660" titleBar="false" resizable="false">
+<PLAYLIST id="h0" left="10" top="40" width="315" height="130" dropDownVisible="false" columns="name=N"/>
+<PLAYLIST id="h1" left="335" top="40" width="315" height="130" dropDownVisible="false" columns="name=Mmmmmmmmmm"/>
+<PLAYLIST id="h2" left="660" top="40" width="315" height="130" dropDownVisible="false" columns="duration=T"/>
+<PLAYLIST id="h3" left="10" top="190" width="315" height="43" dropDownVisible="false" columns="name=N"/>
+<PLAYLIST id="h4" left="335" top="190" width="315" height="130" dropDownVisible="false" columns="name=N;genre=G"/>
+<PLAYLIST id="h5" left="660" top="190" width="315" height="130" dropDownVisible="false" columns="genre=G;name=N"/>
+<PLAYLIST id="h6" left="10" top="340" width="315" height="130" dropDownVisible="false" columns="genre=G;name=N;artist=A;album=B"/>
+<PLAYLIST id="h7" left="335" top="340" width="315" height="130" dropDownVisible="false" columns="artist=A"/>
+<PLAYLIST id="h8" left="660" top="340" width="315" height="130" dropDownVisible="false" columns="album=Abcd"/>
+<PLAYLIST id="h9" left="10" top="490" width="315" height="130" dropDownVisible="false" columns="name=N;duration=T;genre=G"/>
+<PLAYLIST id="h10" left="335" top="490" width="315" height="130" dropDownVisible="false" columns="genre=Mmmmmmmmmm"/>
+<PLAYLIST id="h11" left="660" top="490" width="315" height="130" dropDownVisible="false" columns="genre=G;artist=Mmmmmmmmmm"/>
+</VIEW></THEME>

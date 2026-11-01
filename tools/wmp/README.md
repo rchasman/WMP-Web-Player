@@ -49,8 +49,11 @@ rest in a new child process per skin.
 | `child-zindex` | a child subview with a zIndex below its parent's draws behind the parent's picture; a child with no zIndex, or a button, stays above |
 | `gif-timing` | a frame shows for its delay rounded up to the 1/64 s timer tick, at least 3 ticks: 0-40 ms all show 47 ms |
 | `playlists` | a playlist stacks a 24 px combo naming the playlist, a 29 px toolbar, a 24 px header and 19 px rows; unset colours are white, black and green on a #222222 band that starts 4 px in |
-| `playlist-columns` | columns fit their header plus 16 px and the rows in view plus 12 px, in Segoe UI 9 pt; with no `columns` they are Title, Length, Artist, Genre; columns wider than the box get a 17 px scroll bar |
+| `playlist-columns` | columns fit their header and the rows in view (see `playlist-headers`), in Segoe UI 9 pt; with no `columns` they are Title, Length, Artist, Genre; columns wider than the box get a 17 px scroll bar |
 | `playlist-widths` | column widths don't follow the box's width; `fontFace` and `fontSize` change nothing, the colours apply, and `itemPlayingBackgroundColor` replaces the band |
+| `playlist-headers` | a header-only column is GDI text width + 16 px first (34 px at least), + 12 in the middle and + 15 last (25 px at least); GDI widths are whole-pixel Segoe UI 9 pt letter widths with no kerning |
+| `playlist-cells` | row text is GDI text width + 12 px in every position; the header rule above still applies |
+| `playlist-single` | a lone column is header + 15, row text + 8, and 30 px at least |
 
 Also measured with the `capture` and `layout` tasks: WMP shapes the window from the backgrounds,
 so anything a control draws over a background's hole is cut (xXx Night Vision's lime corners);
